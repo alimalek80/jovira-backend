@@ -18,6 +18,9 @@ Important:
 - `POST /api/v1/auth/login/`
 - `POST /api/v1/auth/refresh/`
 
+Login payload uses email and password:
+- `{"email": "user@example.com", "password": "..."}`
+
 ## API Docs Endpoints
 
 - `GET /api/schema/`
@@ -55,6 +58,35 @@ Registration behavior:
 ### Client (Public read-only)
 - `GET /api/v1/agencies/client/agencies/`
 - `GET /api/v1/agencies/client/agencies/{id}/`
+
+Agency onboarding:
+- `POST /api/v1/agencies/client/register/` (creates agency + agency user in pending state)
+- New agency users are created with `role=AGENCY` and `is_active=false` until approval.
+- Pending agencies are hidden from public client agencies list.
+
+Agency register request payload:
+- `name`
+- `agency_type`
+- `contact_person`
+- `email` (optional; falls back to `account_email` if omitted)
+- `phone` (optional)
+- `mobile_phone` (optional)
+- `skype_id` (optional)
+- `icq` (optional)
+- `account_email` (required; used for login)
+- `account_first_name` (optional)
+- `account_last_name` (optional)
+- `account_phone_number` (optional)
+- `password` (required)
+- `password2` (required)
+
+Agency login behavior:
+- Login is email/password only via `POST /api/v1/auth/login/`.
+- Newly registered agency users cannot log in until admin approval activates their account.
+
+Admin approval:
+- `POST /api/v1/agencies/admin/agencies/{id}/approve/`
+- Sets `is_approved=true`, stamps `approved_at`, and activates linked agency users.
 
 ## Inventory
 
@@ -141,6 +173,27 @@ Reservation and transfer notes:
   - `GET /api/v1/finance/client/invoices/`
   - `GET /api/v1/finance/client/invoices/{id}/`
 
+## Public Website Content
+
+### Hero Section
+- Public read:
+  - `GET /api/v1/public-site/client/hero/`
+- Admin update (IsAdminUser):
+  - `GET /api/v1/public-site/admin/hero/`
+  - `PUT /api/v1/public-site/admin/hero/`
+  - `PATCH /api/v1/public-site/admin/hero/`
+
+Hero payload fields:
+- `badge_text`
+- `image` (optional upload / returned as media URL)
+- `headline`
+- `description`
+- `search_placeholder`
+- `search_button_text`
+- `updated_at` (read-only)
+
+Admin hero update accepts `application/json` for text fields and `multipart/form-data` for image uploads.
+
 ## Next.js Example (copy-ready)
 
 ```ts
@@ -168,6 +221,7 @@ export const ACCOUNTS_ENDPOINTS = {
 export const AGENCIES_ENDPOINTS = {
   admin: `${API_V1}/agencies/admin/agencies/`,
   client: `${API_V1}/agencies/client/agencies/`,
+  register: `${API_V1}/agencies/client/register/`,
 };
 
 export const INVENTORY_ENDPOINTS = {
@@ -203,5 +257,10 @@ export const FINANCE_ENDPOINTS = {
   clientExchangeRates: `${API_V1}/finance/client/exchange-rates/`,
   adminInvoices: `${API_V1}/finance/admin/invoices/`,
   clientInvoices: `${API_V1}/finance/client/invoices/`,
+};
+
+export const PUBLIC_SITE_ENDPOINTS = {
+  clientHero: `${API_V1}/public-site/client/hero/`,
+  adminHero: `${API_V1}/public-site/admin/hero/`,
 };
 ```

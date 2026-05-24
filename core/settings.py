@@ -13,7 +13,7 @@ SECRET_KEY = 'django-insecure-6+)2#$1fln(x#=_ikcz@3%od5@$ti2brnw4o*7_y7dhr-w%a7h
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'inventory',
     'reservations',
     'finance',
+    'publicsite',
 ]
 
 MIDDLEWARE = [
@@ -128,6 +129,8 @@ MODELTRANSLATION_LANGUAGES = ('en', 'tr', 'ru')
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

@@ -1,7 +1,11 @@
 from rest_framework import generics, mixins, permissions, viewsets
 
 from .models import CustomUser
-from .serializers import AdminCustomUserSerializer, ClientCustomUserSerializer, RegisterSerializer
+from .serializers import (
+	AdminCustomUserSerializer,
+	ClientCustomUserSerializer,
+	RegisterSerializer,
+)
 
 
 class AdminCustomUserViewSet(viewsets.ModelViewSet):
