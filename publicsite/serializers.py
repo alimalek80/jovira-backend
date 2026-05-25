@@ -9,6 +9,7 @@ class HeroSectionSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "badge_text",
+            "logo",
             "image",
             "headline",
             "description",

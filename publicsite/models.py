@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 class HeroSection(models.Model):
     badge_text = models.CharField(_("Badge Text"), max_length=120, default="Discover your next journey")
+    logo = models.ImageField(_("Logo"), upload_to="publicsite/logo/", blank=True, null=True)
     image = models.ImageField(_("Image"), upload_to="publicsite/hero/", blank=True, null=True)
     headline = models.CharField(
         _("Headline"),

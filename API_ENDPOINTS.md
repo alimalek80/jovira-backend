@@ -185,6 +185,7 @@ Reservation and transfer notes:
 
 Hero payload fields:
 - `badge_text`
+- `logo` (optional upload / returned as media URL)
 - `image` (optional upload / returned as media URL)
 - `headline`
 - `description`
@@ -192,7 +193,7 @@ Hero payload fields:
 - `search_button_text`
 - `updated_at` (read-only)
 
-Admin hero update accepts `application/json` for text fields and `multipart/form-data` for image uploads.
+Admin hero update accepts `application/json` for text fields and `multipart/form-data` for logo/image uploads.
 
 ## Next.js Example (copy-ready)
 
