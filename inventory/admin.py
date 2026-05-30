@@ -12,7 +12,7 @@ class HotelImageInline(admin.TabularInline):
 
 @admin.register(Hotel)
 class HotelAdmin(TranslationAdmin):
-	list_display = ('name', 'city', 'stars', 'currency', 'price')
+	list_display = ('name', 'city', 'stars', 'currency', 'price', 'agency_price', 'cost_price')
 	search_fields = ('name', 'city')
 	list_filter = ('city', 'stars', 'currency')
 	filter_horizontal = ('features',)
@@ -33,21 +33,21 @@ class HotelImageAdmin(admin.ModelAdmin):
 
 @admin.register(Flight)
 class FlightAdmin(TranslationAdmin):
-	list_display = ('flight_number', 'airline', 'origin', 'destination', 'departure_time', 'arrival_time', 'currency', 'price')
+	list_display = ('flight_number', 'airline', 'origin', 'destination', 'departure_time', 'arrival_time', 'currency', 'price', 'agency_price', 'cost_price')
 	search_fields = ('flight_number', 'airline', 'origin', 'destination')
 	list_filter = ('airline', 'origin', 'destination', 'currency')
 
 
 @admin.register(TourPackage)
 class TourPackageAdmin(TranslationAdmin):
-	list_display = ('name', 'destination', 'days', 'nights')
+	list_display = ('name', 'destination', 'days', 'nights', 'currency', 'public_price', 'agency_price', 'cost_price')
 	search_fields = ('name', 'destination')
 	list_filter = ('destination',)
 
 
 @admin.register(Excursion)
 class ExcursionAdmin(TranslationAdmin):
-	list_display = ('name', 'city', 'duration_hours')
+	list_display = ('name', 'city', 'duration_hours', 'currency', 'public_price', 'agency_price', 'cost_price')
 	search_fields = ('name', 'city')
 	list_filter = ('city',)
 
@@ -61,7 +61,7 @@ class TransferProviderAdmin(admin.ModelAdmin):
 
 @admin.register(Transfer)
 class TransferAdmin(TranslationAdmin):
-	list_display = ('name', 'provider', 'from_location', 'to_location', 'vehicle_type', 'capacity', 'currency', 'public_price', 'agency_price')
+	list_display = ('name', 'provider', 'from_location', 'to_location', 'vehicle_type', 'capacity', 'currency', 'public_price', 'agency_price', 'cost_price')
 	search_fields = ('name', 'from_location', 'to_location', 'provider__name')
 	list_filter = ('provider', 'currency')
 	autocomplete_fields = ('provider', 'currency')

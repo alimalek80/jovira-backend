@@ -38,6 +38,7 @@ class HotelSerializer(serializers.ModelSerializer):
             "currency",
             "price",
             "agency_price",
+            "cost_price",
             "description",
             "description_en",
             "description_tr",
@@ -105,6 +106,7 @@ class FlightSerializer(serializers.ModelSerializer):
             "currency",
             "price",
             "agency_price",
+            "cost_price",
         )
         read_only_fields = ("id",)
 
@@ -157,6 +159,7 @@ class TourPackageSerializer(serializers.ModelSerializer):
             "currency",
             "public_price",
             "agency_price",
+            "cost_price",
         )
         read_only_fields = ("id",)
 
@@ -206,6 +209,7 @@ class ExcursionSerializer(serializers.ModelSerializer):
             "currency",
             "public_price",
             "agency_price",
+            "cost_price",
         )
         read_only_fields = ("id",)
 
@@ -270,6 +274,7 @@ class TransferSerializer(serializers.ModelSerializer):
             "currency",
             "public_price",
             "agency_price",
+            "cost_price",
         )
         read_only_fields = ("id",)
 

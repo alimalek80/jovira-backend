@@ -50,6 +50,7 @@ class Transfer(models.Model):
     )
     public_price = models.DecimalField(_("Public Price"), max_digits=12, decimal_places=2, null=True, blank=True)
     agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(_("Cost Price"), max_digits=12, decimal_places=2, null=True, blank=True, help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."))
 
     class Meta:
         verbose_name = _("Transfer")
@@ -91,6 +92,7 @@ class Hotel(models.Model):
     )
     price = models.DecimalField(_("Price"), max_digits=12, decimal_places=2, null=True, blank=True)
     agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(_("Cost Price"), max_digits=12, decimal_places=2, null=True, blank=True, help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."))
     description = models.TextField(_("Description"), blank=True, null=True)
     main_image = models.ImageField(_("Main Image"), upload_to="hotels/main/", blank=True, null=True)
     features = models.ManyToManyField(HotelFeature, blank=True, related_name="hotels", verbose_name=_("Features"))
@@ -141,6 +143,7 @@ class Flight(models.Model):
     )
     price = models.DecimalField(_("Price"), max_digits=12, decimal_places=2, null=True, blank=True)
     agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(_("Cost Price"), max_digits=12, decimal_places=2, null=True, blank=True, help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."))
 
     class Meta:
         verbose_name = _("Flight")
@@ -183,6 +186,14 @@ class TourPackage(models.Model):
         null=True,
         blank=True,
     )
+    cost_price = models.DecimalField(
+        _("Cost Price"),
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."),
+    )
 
     class Meta:
         verbose_name = _("Tour Package")
@@ -212,6 +223,7 @@ class Excursion(models.Model):
     )
     public_price = models.DecimalField(_("Public Price"), max_digits=12, decimal_places=2, null=True, blank=True)
     agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(_("Cost Price"), max_digits=12, decimal_places=2, null=True, blank=True, help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."))
 
     class Meta:
         verbose_name = _("Excursion")

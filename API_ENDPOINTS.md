@@ -97,6 +97,7 @@ Admin approval:
   - **Hotel fields:**
     - `name`, `city`, `stars`, `currency`
     - `price` (public price), `agency_price` (optional; agency/staff users see this instead)
+    - `cost_price` (optional; internal procurement cost paid by Jovira — **admin only, never returned to client endpoints**)
     - `description` (multi-language)
     - `main_image` (image upload)
     - `features` (list of feature IDs)
@@ -110,25 +111,28 @@ Admin approval:
   - **Payload fields:** `hotel` (integer FK, required), `image` (file, required), `alt_text` (string, optional), `order` (integer, optional)
 - `GET, POST /api/v1/inventory/admin/flights/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/flights/{id}/`
-  - **Flight fields:** `flight_number`, `airline`, `origin`, `destination`, `departure_time`, `arrival_time`, `currency`, `price`, `agency_price`
+  - **Flight fields:** `flight_number`, `airline`, `origin`, `destination`, `departure_time`, `arrival_time`, `currency`, `price`, `agency_price`, `cost_price` (internal cost — admin only)
 - `GET, POST /api/v1/inventory/admin/tour-packages/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/tour-packages/{id}/`
 - `GET, POST /api/v1/inventory/admin/excursions/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/excursions/{id}/`
+  - **Excursion fields:** `name`, `city`, `duration_hours`, `currency`, `public_price`, `agency_price`, `cost_price` (internal cost — admin only)
 - `GET, POST /api/v1/inventory/admin/transfer-providers/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/transfer-providers/{id}/`
 - `GET, POST /api/v1/inventory/admin/transfers/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/transfers/{id}/`
+  - **Transfer fields:** `provider` (FK), `name`, `from_location`, `to_location`, `vehicle_type`, `capacity`, `currency`, `public_price`, `agency_price`, `cost_price` (internal cost — admin only)
 
 Tour package admin note:
 - `/inventory/admin/tour-packages/` is accessible by admin and `STAFF` role users.
-- Tour package admin payload includes both `public_price` and `agency_price`.
+- Tour package admin payload includes `public_price`, `agency_price`, and `cost_price` (internal cost — admin only).
 
-Agency pricing behavior (hotels, flights, tour packages):
-- Admin endpoints always return both `price`/`public_price` and `agency_price`.
+Agency pricing behavior (hotels, flights, tour packages, excursions, transfers):
+- Admin endpoints always return `price`/`public_price`, `agency_price`, and `cost_price`.
 - Client endpoints return a single `price` field resolved by the authenticated user's role:
   - `NORMAL` users and unauthenticated users → public price.
   - `AGENCY`, `STAFF`, and Django admin/staff users → `agency_price` (if set, otherwise falls back to public price).
+- `cost_price` is **never** included in client endpoint responses — it is strictly internal to Jovira for margin/profit tracking.
 
 ### Client (Public read-only)
 - `GET /api/v1/inventory/client/hotels/`
