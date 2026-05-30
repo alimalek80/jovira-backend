@@ -1,8 +1,9 @@
 from rest_framework import permissions, viewsets
 
-from .models import ExcursionBooking, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
+from .models import ExcursionBooking, ExcursionService, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
 from .serializers import (
 	ExcursionBookingSerializer,
+	ExcursionServiceSerializer,
 	FlightTicketSerializer,
 	HotelBookingSerializer,
 	ReservationSerializer,
@@ -80,4 +81,16 @@ class AdminTransferServiceViewSet(viewsets.ModelViewSet):
 class ClientTransferServiceViewSet(viewsets.ModelViewSet):
 	queryset = TransferService.objects.all().order_by("service_date", "id")
 	serializer_class = TransferServiceSerializer
+	permission_classes = (permissions.IsAuthenticated,)
+
+
+class AdminExcursionServiceViewSet(viewsets.ModelViewSet):
+	queryset = ExcursionService.objects.all().order_by("-excursion_date")
+	serializer_class = ExcursionServiceSerializer
+	permission_classes = (permissions.IsAdminUser,)
+
+
+class ClientExcursionServiceViewSet(viewsets.ModelViewSet):
+	queryset = ExcursionService.objects.all().order_by("-excursion_date")
+	serializer_class = ExcursionServiceSerializer
 	permission_classes = (permissions.IsAuthenticated,)

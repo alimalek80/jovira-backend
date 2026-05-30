@@ -1,9 +1,11 @@
+from decimal import Decimal
+
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from agencies.models import Agency
-from inventory.models import Excursion, Flight, Hotel, TourPackage
+from inventory.models import Excursion, Flight, Hotel, TourPackage, Transfer
 
 
 class Reservation(models.Model):
@@ -220,6 +222,14 @@ class TransferService(models.Model):
         related_name="transfer_services",
         verbose_name=_("Reservation"),
     )
+    transfer = models.ForeignKey(
+        Transfer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bookings",
+        verbose_name=_("Transfer (Catalog)"),
+    )
     tour_package = models.ForeignKey(
         TourPackage,
         on_delete=models.SET_NULL,
@@ -245,6 +255,7 @@ class TransferService(models.Model):
     )
     to_location_name = models.CharField(_("To Location Name"), max_length=255)
     price = models.DecimalField(_("Price"), max_digits=12, decimal_places=2)
+    agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
     currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -272,3 +283,62 @@ class TransferService(models.Model):
 
     def __str__(self):
         return f"{self.reservation.reservation_number} - {self.service_name}"
+
+
+class ExcursionService(models.Model):
+    """Standalone excursion booking with full financial tracking."""
+
+    system_date = models.DateTimeField(_("System Date"), auto_now_add=True)
+    excursion_date = models.DateField(_("Excursion Date"))
+    excursion = models.ForeignKey(
+        Excursion,
+        on_delete=models.PROTECT,
+        related_name="excursion_services",
+        verbose_name=_("Excursion"),
+    )
+    is_combo = models.BooleanField(_("Is Combo"), default=False)
+    pickup_point = models.CharField(_("Pickup Point"), max_length=255, blank=True, null=True)
+
+    # Financials
+    price = models.DecimalField(
+        _("Price"), max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+    selling_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="excursion_services_selling",
+        verbose_name=_("Selling Currency"),
+    )
+    cost = models.DecimalField(
+        _("Cost"), max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+    cost_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="excursion_services_cost",
+        verbose_name=_("Cost Currency"),
+    )
+    cross_currency_rate = models.DecimalField(
+        _("Cross Currency Rate"),
+        max_digits=15,
+        decimal_places=10,
+        default=Decimal("1.0000000000"),
+    )
+    is_paid = models.BooleanField(_("Is Paid"), default=False)
+
+    # Tracking
+    confirm_booking_number = models.CharField(
+        _("Confirm Booking Number"), max_length=50, blank=True, null=True
+    )
+    agent_confirmation_number = models.CharField(
+        _("Agent Confirmation Number"), max_length=50, blank=True, null=True
+    )
+    note = models.TextField(_("Note"), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _("Excursion Service")
+        verbose_name_plural = _("Excursion Services")
+        ordering = ("-excursion_date",)
+
+    def __str__(self):
+        return f"{self.excursion.name} - {self.excursion_date}"

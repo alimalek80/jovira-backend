@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ExcursionBooking, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
+from .models import ExcursionBooking, ExcursionService, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
 
 
 class TouristInline(admin.TabularInline):
@@ -81,3 +81,22 @@ class TransferServiceAdmin(admin.ModelAdmin):
 	list_filter = ('service_date', 'on_arrival', 'on_departure', 'currency')
 	search_fields = ('reservation__reservation_number', 'service_name', 'from_location_name', 'to_location_name')
 	autocomplete_fields = ('reservation', 'tour_package', 'currency', 'passengers')
+
+
+@admin.register(ExcursionService)
+class ExcursionServiceAdmin(admin.ModelAdmin):
+	list_display = (
+		'excursion',
+		'excursion_date',
+		'is_combo',
+		'price',
+		'selling_currency',
+		'cost',
+		'cost_currency',
+		'is_paid',
+		'system_date',
+	)
+	list_filter = ('excursion_date', 'is_paid', 'is_combo', 'selling_currency', 'cost_currency')
+	search_fields = ('excursion__name', 'confirm_booking_number', 'agent_confirmation_number')
+	autocomplete_fields = ('excursion', 'selling_currency', 'cost_currency')
+	readonly_fields = ('system_date',)

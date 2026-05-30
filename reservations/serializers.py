@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ExcursionBooking, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
+from .models import ExcursionBooking, ExcursionService, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
 
 
 class TouristSerializer(serializers.ModelSerializer):
@@ -60,6 +60,7 @@ class TransferServiceSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "reservation",
+            "transfer",
             "tour_package",
             "service_name",
             "service_date",
@@ -70,6 +71,7 @@ class TransferServiceSerializer(serializers.ModelSerializer):
             "to_location_type",
             "to_location_name",
             "price",
+            "agency_price",
             "currency",
             "passengers",
             "external_note",
@@ -107,6 +109,31 @@ class TransferServiceSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+    def _apply_transfer_defaults(self, validated_data):
+        """Auto-populate price/currency from the catalog Transfer if not explicitly provided."""
+        transfer = validated_data.get("transfer")
+        if not transfer or not transfer.currency:
+            return
+
+        request = self.context.get("request")
+        user = request.user if request else None
+
+        if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):
+            catalog_price = transfer.agency_price
+        else:
+            catalog_price = transfer.public_price
+
+        if catalog_price is not None and "price" not in self.initial_data:
+            validated_data.setdefault("price", catalog_price)
+        if transfer.agency_price is not None and "agency_price" not in self.initial_data:
+            validated_data.setdefault("agency_price", transfer.agency_price)
+        if "currency" not in self.initial_data:
+            validated_data.setdefault("currency", transfer.currency)
+
+    def create(self, validated_data):
+        self._apply_transfer_defaults(validated_data)
+        return super().create(validated_data)
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -200,3 +227,57 @@ class ReservationSerializer(serializers.ModelSerializer):
                     Tourist.objects.create(reservation=instance, **tourist_data)
 
         return instance
+
+
+class ExcursionServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExcursionService
+        fields = (
+            "id",
+            "system_date",
+            "excursion_date",
+            "excursion",
+            "is_combo",
+            "pickup_point",
+            "price",
+            "selling_currency",
+            "cost",
+            "cost_currency",
+            "cross_currency_rate",
+            "is_paid",
+            "confirm_booking_number",
+            "agent_confirmation_number",
+            "note",
+        )
+        read_only_fields = ("id", "system_date")
+
+    def _apply_excursion_defaults(self, validated_data):
+        """
+        If price/cost/selling_currency/cost_currency are not explicitly provided,
+        auto-populate them from the linked excursion's catalog price and currency.
+        """
+        excursion = validated_data.get("excursion")
+        if not excursion or not excursion.currency:
+            return
+
+        request = self.context.get("request")
+        user = request.user if request else None
+
+        # Choose catalog price based on user role (agency → agency_price, else public_price)
+        if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):
+            catalog_price = excursion.agency_price
+        else:
+            catalog_price = excursion.public_price
+
+        if catalog_price is not None and "price" not in self.initial_data:
+            validated_data.setdefault("price", catalog_price)
+        if excursion.currency is not None and "selling_currency" not in self.initial_data:
+            validated_data.setdefault("selling_currency", excursion.currency)
+        if catalog_price is not None and "cost" not in self.initial_data:
+            validated_data.setdefault("cost", catalog_price)
+        if excursion.currency is not None and "cost_currency" not in self.initial_data:
+            validated_data.setdefault("cost_currency", excursion.currency)
+
+    def create(self, validated_data):
+        self._apply_excursion_defaults(validated_data)
+        return super().create(validated_data)
