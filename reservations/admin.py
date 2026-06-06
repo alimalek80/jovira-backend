@@ -37,10 +37,10 @@ class TouristAdmin(admin.ModelAdmin):
 
 @admin.register(HotelBooking)
 class HotelBookingAdmin(admin.ModelAdmin):
-	list_display = ('reservation', 'hotel', 'check_in_date', 'check_out_date', 'board_type', 'is_paid')
-	list_filter = ('board_type', 'is_paid', 'check_in_date')
-	search_fields = ('reservation__reservation_number', 'hotel__name')
-	autocomplete_fields = ('reservation', 'hotel')
+	list_display = ('reservation', 'hotel_room', 'check_in_date', 'check_out_date', 'quantity', 'is_paid')
+	list_filter = ('is_paid', 'check_in_date')
+	search_fields = ('reservation__reservation_number', 'hotel_room__hotel__name')
+	autocomplete_fields = ('reservation', 'hotel_room')
 
 
 @admin.register(FlightTicket)

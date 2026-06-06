@@ -5,12 +5,14 @@ from .views import (
     AdminExcursionViewSet,
     AdminFlightViewSet,
     AdminHotelImageViewSet,
+    AdminHotelRoomViewSet,
     AdminHotelViewSet,
     AdminTourPackageViewSet,
     AdminTransferProviderViewSet,
     AdminTransferViewSet,
     ClientExcursionViewSet,
     ClientFlightViewSet,
+    ClientHotelRoomViewSet,
     ClientHotelViewSet,
     ClientTourPackageViewSet,
     ClientTransferViewSet,
@@ -18,6 +20,7 @@ from .views import (
 
 admin_router = DefaultRouter()
 admin_router.register(r"hotels", AdminHotelViewSet, basename="admin-hotels")
+admin_router.register(r"hotel-rooms", AdminHotelRoomViewSet, basename="admin-hotel-rooms")
 admin_router.register(r"hotel-images", AdminHotelImageViewSet, basename="admin-hotel-images")
 admin_router.register(r"flights", AdminFlightViewSet, basename="admin-flights")
 admin_router.register(r"tour-packages", AdminTourPackageViewSet, basename="admin-tour-packages")
@@ -27,6 +30,7 @@ admin_router.register(r"transfers", AdminTransferViewSet, basename="admin-transf
 
 client_router = DefaultRouter()
 client_router.register(r"hotels", ClientHotelViewSet, basename="client-hotels")
+client_router.register(r"hotel-rooms", ClientHotelRoomViewSet, basename="client-hotel-rooms")
 client_router.register(r"flights", ClientFlightViewSet, basename="client-flights")
 client_router.register(r"tour-packages", ClientTourPackageViewSet, basename="client-tour-packages")
 client_router.register(r"excursions", ClientExcursionViewSet, basename="client-excursions")

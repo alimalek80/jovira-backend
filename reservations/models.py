@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from agencies.models import Agency
-from inventory.models import Excursion, Flight, Hotel, TourPackage, Transfer
+from inventory.models import Excursion, Flight, Hotel, HotelRoom, TourPackage, Transfer
 
 
 class Reservation(models.Model):
@@ -113,31 +113,21 @@ class Tourist(models.Model):
 
 
 class HotelBooking(models.Model):
-    class BoardTypeChoices(models.TextChoices):
-        BB = "BB", _("BB")
-        HB = "HB", _("HB")
-        ALL = "ALL", _("ALL")
-
     reservation = models.ForeignKey(
         Reservation,
         on_delete=models.CASCADE,
         related_name="hotel_bookings",
         verbose_name=_("Reservation"),
     )
-    hotel = models.ForeignKey(
-        Hotel,
+    hotel_room = models.ForeignKey(
+        HotelRoom,
         on_delete=models.PROTECT,
         related_name="hotel_bookings",
-        verbose_name=_("Hotel"),
+        verbose_name=_("Hotel Room"),
     )
     check_in_date = models.DateField(_("Check-in Date"))
     check_out_date = models.DateField(_("Check-out Date"))
-    board_type = models.CharField(
-        _("Board Type"),
-        max_length=10,
-        choices=BoardTypeChoices.choices,
-        default=BoardTypeChoices.BB,
-    )
+    quantity = models.PositiveIntegerField(_("Quantity"), default=1)
     is_paid = models.BooleanField(_("Is Paid"), default=False)
 
     class Meta:
@@ -146,7 +136,7 @@ class HotelBooking(models.Model):
         ordering = ("check_in_date",)
 
     def __str__(self):
-        return f"{self.reservation.reservation_number} - {self.hotel.name}"
+        return f"{self.reservation.reservation_number} - {self.hotel_room}"
 
 
 class FlightTicket(models.Model):

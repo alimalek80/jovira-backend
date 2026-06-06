@@ -1,17 +1,19 @@
 from rest_framework import permissions, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from .models import Excursion, Flight, Hotel, HotelImage, TourPackage, Transfer, TransferProvider
+from .models import Excursion, Flight, Hotel, HotelImage, HotelRoom, TourPackage, Transfer, TransferProvider
 from .permissions import IsAdminOrStaffRole
 from .serializers import (
 	ClientExcursionSerializer,
 	ClientFlightSerializer,
+	ClientHotelRoomSerializer,
 	ClientHotelSerializer,
 	ClientTourPackageSerializer,
 	ClientTransferSerializer,
 	ExcursionSerializer,
 	FlightSerializer,
 	HotelImageSerializer,
+	HotelRoomSerializer,
 	HotelSerializer,
 	TourPackageSerializer,
 	TransferProviderSerializer,
@@ -23,6 +25,19 @@ class AdminHotelViewSet(viewsets.ModelViewSet):
 	queryset = Hotel.objects.all().order_by("name")
 	serializer_class = HotelSerializer
 	permission_classes = (permissions.IsAdminUser,)
+
+
+class AdminHotelRoomViewSet(viewsets.ModelViewSet):
+	queryset = HotelRoom.objects.select_related("hotel", "currency").order_by("hotel", "date_from", "room_type")
+	serializer_class = HotelRoomSerializer
+	permission_classes = (permissions.IsAdminUser,)
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		hotel_id = self.request.query_params.get("hotel")
+		if hotel_id:
+			qs = qs.filter(hotel_id=hotel_id)
+		return qs
 
 
 class AdminHotelImageViewSet(viewsets.ModelViewSet):
@@ -43,6 +58,19 @@ class ClientHotelViewSet(viewsets.ReadOnlyModelViewSet):
 	queryset = Hotel.objects.all().order_by("name")
 	serializer_class = ClientHotelSerializer
 	permission_classes = (permissions.AllowAny,)
+
+
+class ClientHotelRoomViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = HotelRoom.objects.select_related("hotel", "currency").order_by("hotel", "date_from", "room_type")
+	serializer_class = ClientHotelRoomSerializer
+	permission_classes = (permissions.AllowAny,)
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		hotel_id = self.request.query_params.get("hotel")
+		if hotel_id:
+			qs = qs.filter(hotel_id=hotel_id)
+		return qs
 
 
 class AdminFlightViewSet(viewsets.ModelViewSet):

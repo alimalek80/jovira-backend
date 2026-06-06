@@ -4,7 +4,7 @@ from modeltranslation.admin import TranslationAdmin
 from decimal import Decimal
 from finance.utils import convert_amount
 
-from .models import Excursion, Flight, Hotel, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
+from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
 
 
 
@@ -13,13 +13,27 @@ class HotelImageInline(admin.TabularInline):
 	extra = 1
 
 
+class HotelRoomInline(admin.TabularInline):
+	model = HotelRoom
+	extra = 0
+	fields = ("room_type", "board_type", "date_from", "date_to", "availability_count", "currency", "public_price", "agency_price", "cost_price")
+
+
 @admin.register(Hotel)
 class HotelAdmin(TranslationAdmin):
-	list_display = ('name', 'city', 'stars', 'currency', 'price', 'agency_price', 'cost_price')
+	list_display = ('name', 'city', 'stars')
 	search_fields = ('name', 'city')
-	list_filter = ('city', 'stars', 'currency')
+	list_filter = ('city', 'stars')
 	filter_horizontal = ('features',)
-	inlines = [HotelImageInline]
+	inlines = [HotelImageInline, HotelRoomInline]
+
+
+@admin.register(HotelRoom)
+class HotelRoomAdmin(admin.ModelAdmin):
+	list_display = ('hotel', 'room_type', 'board_type', 'date_from', 'date_to', 'availability_count', 'currency', 'public_price', 'agency_price', 'cost_price')
+	list_filter = ('hotel', 'room_type', 'board_type', 'currency')
+	search_fields = ('hotel__name',)
+	autocomplete_fields = ('hotel', 'currency')
 
 
 @admin.register(HotelFeature)
@@ -79,10 +93,6 @@ class TourPackageAdminForm(forms.ModelForm):
 
 		for item in excursions or []:
 			minimum_floor += convert_amount(item.cost_price or Decimal("0.00"), item.currency_id, getattr(currency, "id", None))
-
-		nights_multiplier = nights if nights > 0 else 1
-		for item in hotels or []:
-			minimum_floor += convert_amount((item.cost_price or Decimal("0.00")) * nights_multiplier, item.currency_id, getattr(currency, "id", None))
 
 		minimum_floor = minimum_floor.quantize(Decimal("0.01"))
 

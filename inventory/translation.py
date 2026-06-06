@@ -1,12 +1,17 @@
 from modeltranslation.translator import TranslationOptions, register
 
-from .models import Excursion, Flight, Hotel, TourPackage, HotelFeature, HotelImage, Transfer
+from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, HotelFeature, HotelImage, Transfer
 
 
 
 @register(Hotel)
 class HotelTranslationOptions(TranslationOptions):
     fields = ('name', 'city', 'description')
+
+
+@register(HotelRoom)
+class HotelRoomTranslationOptions(TranslationOptions):
+    fields = ('note',)
 
 
 @register(HotelFeature)

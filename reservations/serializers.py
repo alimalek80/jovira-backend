@@ -31,13 +31,57 @@ class HotelBookingSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "reservation",
-            "hotel",
+            "hotel_room",
             "check_in_date",
             "check_out_date",
-            "board_type",
+            "quantity",
             "is_paid",
         )
         read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        hotel_room = attrs.get("hotel_room", getattr(self.instance, "hotel_room", None))
+        quantity = attrs.get("quantity", getattr(self.instance, "quantity", 1))
+        check_in_date = attrs.get("check_in_date", getattr(self.instance, "check_in_date", None))
+        check_out_date = attrs.get("check_out_date", getattr(self.instance, "check_out_date", None))
+
+        if hotel_room and check_in_date and check_out_date:
+            if check_in_date >= check_out_date:
+                raise serializers.ValidationError(
+                    {"check_out_date": "Check-out date must be after check-in date."}
+                )
+
+            if check_in_date < hotel_room.date_from or check_out_date > hotel_room.date_to:
+                raise serializers.ValidationError(
+                    {
+                        "hotel_room": (
+                            f"Booking dates must fall within the room's availability window "
+                            f"({hotel_room.date_from} – {hotel_room.date_to})."
+                        )
+                    }
+                )
+
+            from django.db.models import Sum
+            existing_qs = HotelBooking.objects.filter(
+                hotel_room=hotel_room,
+                check_in_date__lt=check_out_date,
+                check_out_date__gt=check_in_date,
+            )
+            if self.instance:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            booked = existing_qs.aggregate(total=Sum("quantity"))["total"] or 0
+            available = hotel_room.availability_count - booked
+            if quantity > available:
+                raise serializers.ValidationError(
+                    {
+                        "quantity": (
+                            f"Not enough availability. Requested: {quantity}, "
+                            f"Available: {available}."
+                        )
+                    }
+                )
+
+        return attrs
 
 
 class FlightTicketSerializer(serializers.ModelSerializer):

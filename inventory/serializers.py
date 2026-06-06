@@ -2,7 +2,7 @@ from rest_framework import serializers
 from decimal import Decimal
 from finance.utils import convert_amount
 
-from .models import Excursion, Flight, Hotel, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
+from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
 
 
 
@@ -20,65 +20,42 @@ class HotelImageSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)
 
 
-class HotelSerializer(serializers.ModelSerializer):
-    features = HotelFeatureSerializer(many=True, read_only=True)
-    gallery_images = HotelImageSerializer(many=True, read_only=True)
-
+class HotelRoomSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Hotel
+        model = HotelRoom
         fields = (
             "id",
-            "name",
-            "name_en",
-            "name_tr",
-            "name_ru",
-            "city",
-            "city_en",
-            "city_tr",
-            "city_ru",
-            "stars",
+            "hotel",
+            "room_type",
+            "board_type",
+            "date_from",
+            "date_to",
+            "availability_count",
             "currency",
-            "price",
+            "public_price",
             "agency_price",
             "cost_price",
-            "description",
-            "description_en",
-            "description_tr",
-            "description_ru",
-            "main_image",
-            "features",
-            "gallery_images",
+            "note",
         )
         read_only_fields = ("id",)
 
 
-class ClientHotelSerializer(serializers.ModelSerializer):
+class ClientHotelRoomSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
-    features = HotelFeatureSerializer(many=True, read_only=True)
-    gallery_images = HotelImageSerializer(many=True, read_only=True)
 
     class Meta:
-        model = Hotel
+        model = HotelRoom
         fields = (
             "id",
-            "name",
-            "name_en",
-            "name_tr",
-            "name_ru",
-            "city",
-            "city_en",
-            "city_tr",
-            "city_ru",
-            "stars",
+            "hotel",
+            "room_type",
+            "board_type",
+            "date_from",
+            "date_to",
+            "availability_count",
             "currency",
             "price",
-            "description",
-            "description_en",
-            "description_tr",
-            "description_ru",
-            "main_image",
-            "features",
-            "gallery_images",
+            "note",
         )
         read_only_fields = ("id",)
 
@@ -86,6 +63,66 @@ class ClientHotelSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = request.user if request else None
         return obj.get_price_for_user(user)
+
+
+class HotelSerializer(serializers.ModelSerializer):
+    features = HotelFeatureSerializer(many=True, read_only=True)
+    gallery_images = HotelImageSerializer(many=True, read_only=True)
+    rooms = HotelRoomSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Hotel
+        fields = (
+            "id",
+            "name",
+            "name_en",
+            "name_tr",
+            "name_ru",
+            "city",
+            "city_en",
+            "city_tr",
+            "city_ru",
+            "stars",
+            "description",
+            "description_en",
+            "description_tr",
+            "description_ru",
+            "main_image",
+            "features",
+            "gallery_images",
+            "rooms",
+        )
+        read_only_fields = ("id",)
+
+
+class ClientHotelSerializer(serializers.ModelSerializer):
+    features = HotelFeatureSerializer(many=True, read_only=True)
+    gallery_images = HotelImageSerializer(many=True, read_only=True)
+    rooms = ClientHotelRoomSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Hotel
+        fields = (
+            "id",
+            "name",
+            "name_en",
+            "name_tr",
+            "name_ru",
+            "city",
+            "city_en",
+            "city_tr",
+            "city_ru",
+            "stars",
+            "description",
+            "description_en",
+            "description_tr",
+            "description_ru",
+            "main_image",
+            "features",
+            "gallery_images",
+            "rooms",
+        )
+        read_only_fields = ("id",)
 
 
 class FlightSerializer(serializers.ModelSerializer):
@@ -183,7 +220,6 @@ class TourPackageSerializer(serializers.ModelSerializer):
         nights = attrs.get("nights", getattr(instance, "nights", 1))
 
         flights = attrs.get("flights", instance.flights.all() if instance else [])
-        hotels = attrs.get("hotels", instance.hotels.all() if instance else [])
         transfers = attrs.get("transfers", instance.transfers.all() if instance else [])
         excursions = attrs.get("excursions", instance.excursions.all() if instance else [])
 
@@ -196,10 +232,6 @@ class TourPackageSerializer(serializers.ModelSerializer):
 
         for item in excursions:
             minimum_floor += convert_amount(item.cost_price or Decimal("0.00"), item.currency_id, getattr(currency, "id", None))
-
-        nights_multiplier = nights if nights and nights > 0 else 1
-        for item in hotels:
-            minimum_floor += convert_amount((item.cost_price or Decimal("0.00")) * nights_multiplier, item.currency_id, getattr(currency, "id", None))
 
         minimum_floor = minimum_floor.quantize(Decimal("0.01"))
 

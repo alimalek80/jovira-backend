@@ -84,17 +84,6 @@ class Hotel(models.Model):
     name = models.CharField(_("Hotel Name"), max_length=255)
     city = models.CharField(_("City"), max_length=120)
     stars = models.IntegerField(_("Stars"))
-    currency = models.ForeignKey(
-        "finance.Currency",
-        on_delete=models.PROTECT,
-        related_name="hotels",
-        verbose_name=_("Currency"),
-        null=True,
-        blank=True,
-    )
-    price = models.DecimalField(_("Price"), max_digits=12, decimal_places=2, null=True, blank=True)
-    agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
-    cost_price = models.DecimalField(_("Cost Price"), max_digits=12, decimal_places=2, null=True, blank=True, help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."))
     description = models.TextField(_("Description"), blank=True, null=True)
     main_image = models.ImageField(_("Main Image"), upload_to="hotels/main/", blank=True, null=True)
     features = models.ManyToManyField(HotelFeature, blank=True, related_name="hotels", verbose_name=_("Features"))
@@ -106,11 +95,6 @@ class Hotel(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.city})"
-
-    def get_price_for_user(self, user):
-        if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):
-            return self.agency_price
-        return self.price
 
 
 class HotelImage(models.Model):
@@ -126,6 +110,78 @@ class HotelImage(models.Model):
 
     def __str__(self):
         return f"{self.hotel.name} - {self.alt_text or self.image.url}"
+
+
+class HotelRoom(models.Model):
+    class RoomTypeChoices(models.TextChoices):
+        SINGLE = "SINGLE", _("Single")
+        DOUBLE = "DOUBLE", _("Double")
+        TRIPLE = "TRIPLE", _("Triple")
+        FAMILY = "FAMILY", _("Family")
+        SUITE = "SUITE", _("Suite")
+
+    class BoardTypeChoices(models.TextChoices):
+        RO = "RO", _("RO (Room Only)")
+        BB = "BB", _("BB (Bed & Breakfast)")
+        HB = "HB", _("HB (Half Board)")
+        FB = "FB", _("FB (Full Board)")
+        ALL = "ALL", _("All Inclusive")
+        UALL = "UALL", _("Ultra All Inclusive")
+
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        related_name="rooms",
+        verbose_name=_("Hotel"),
+    )
+    room_type = models.CharField(
+        _("Room Type"),
+        max_length=20,
+        choices=RoomTypeChoices.choices,
+    )
+    board_type = models.CharField(
+        _("Board Type"),
+        max_length=10,
+        choices=BoardTypeChoices.choices,
+    )
+    date_from = models.DateField(_("Date From"))
+    date_to = models.DateField(_("Date To"))
+    availability_count = models.PositiveIntegerField(_("Availability Count"), default=0)
+    currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="hotel_rooms",
+        verbose_name=_("Currency"),
+    )
+    public_price = models.DecimalField(_("Public Price"), max_digits=12, decimal_places=2)
+    agency_price = models.DecimalField(
+        _("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cost_price = models.DecimalField(
+        _("Cost Price"),
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."),
+    )
+    note = models.TextField(_("Note"), blank=True)
+
+    class Meta:
+        verbose_name = _("Hotel Room")
+        verbose_name_plural = _("Hotel Rooms")
+        ordering = ("hotel", "date_from", "room_type")
+
+    def __str__(self):
+        return (
+            f"{self.hotel.name} — {self.get_room_type_display()} / "
+            f"{self.get_board_type_display()} [{self.date_from} – {self.date_to}]"
+        )
+
+    def get_price_for_user(self, user):
+        if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):
+            return self.agency_price
+        return self.public_price
 
 
 class Flight(models.Model):
@@ -247,11 +303,6 @@ class TourPackage(models.Model):
         for excursion in self.excursions.all():
             component_cost = excursion.cost_price or Decimal("0.00")
             floor += convert_amount(component_cost, excursion.currency_id, self.currency_id)
-
-        nights_multiplier = self.nights if self.nights and self.nights > 0 else 1
-        for hotel in self.hotels.all():
-            component_cost = (hotel.cost_price or Decimal("0.00")) * nights_multiplier
-            floor += convert_amount(component_cost, hotel.currency_id, self.currency_id)
 
         return floor.quantize(Decimal("0.01"))
 
