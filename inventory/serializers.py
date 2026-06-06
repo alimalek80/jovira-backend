@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from decimal import Decimal
+from finance.utils import convert_amount
 
 from .models import Excursion, Flight, Hotel, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
 
@@ -142,6 +144,8 @@ class ClientFlightSerializer(serializers.ModelSerializer):
 
 
 class TourPackageSerializer(serializers.ModelSerializer):
+    minimum_cost_floor = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = TourPackage
         fields = (
@@ -160,8 +164,70 @@ class TourPackageSerializer(serializers.ModelSerializer):
             "public_price",
             "agency_price",
             "cost_price",
+            "flights",
+            "hotels",
+            "transfers",
+            "excursions",
+            "minimum_cost_floor",
         )
         read_only_fields = ("id",)
+
+    def get_minimum_cost_floor(self, obj):
+        return obj.calculate_minimum_cost_floor()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        instance = self.instance
+        currency = attrs.get("currency", getattr(instance, "currency", None))
+        nights = attrs.get("nights", getattr(instance, "nights", 1))
+
+        flights = attrs.get("flights", instance.flights.all() if instance else [])
+        hotels = attrs.get("hotels", instance.hotels.all() if instance else [])
+        transfers = attrs.get("transfers", instance.transfers.all() if instance else [])
+        excursions = attrs.get("excursions", instance.excursions.all() if instance else [])
+
+        minimum_floor = Decimal("0.00")
+        for item in flights:
+            minimum_floor += convert_amount(item.cost_price or Decimal("0.00"), item.currency_id, getattr(currency, "id", None))
+
+        for item in transfers:
+            minimum_floor += convert_amount(item.cost_price or Decimal("0.00"), item.currency_id, getattr(currency, "id", None))
+
+        for item in excursions:
+            minimum_floor += convert_amount(item.cost_price or Decimal("0.00"), item.currency_id, getattr(currency, "id", None))
+
+        nights_multiplier = nights if nights and nights > 0 else 1
+        for item in hotels:
+            minimum_floor += convert_amount((item.cost_price or Decimal("0.00")) * nights_multiplier, item.currency_id, getattr(currency, "id", None))
+
+        minimum_floor = minimum_floor.quantize(Decimal("0.01"))
+
+        cost_price = attrs.get("cost_price", getattr(instance, "cost_price", None))
+        agency_price = attrs.get("agency_price", getattr(instance, "agency_price", None))
+        public_price = attrs.get("public_price", getattr(instance, "public_price", None))
+
+        if cost_price is not None and cost_price < minimum_floor:
+            raise serializers.ValidationError({
+                "cost_price": "Cost price cannot be lower than minimum component cost floor."
+            })
+
+        if agency_price is not None and agency_price < minimum_floor:
+            raise serializers.ValidationError({
+                "agency_price": "Agency price cannot be lower than minimum component cost floor."
+            })
+
+        if public_price is not None and public_price < minimum_floor:
+            raise serializers.ValidationError({
+                "public_price": "Public price cannot be lower than minimum component cost floor."
+            })
+
+        if public_price is not None and agency_price is not None and public_price < agency_price:
+            raise serializers.ValidationError({
+                "public_price": "Public price cannot be lower than agency price."
+            })
+
+        return attrs
 
 
 class ClientTourPackageSerializer(serializers.ModelSerializer):

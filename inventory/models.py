@@ -1,5 +1,7 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
 
 
 class TransferProvider(models.Model):
@@ -194,6 +196,30 @@ class TourPackage(models.Model):
         blank=True,
         help_text=_("Internal procurement cost paid by Jovira. Not visible to agencies or public."),
     )
+    flights = models.ManyToManyField(
+        "Flight",
+        blank=True,
+        related_name="tour_packages",
+        verbose_name=_("Flights"),
+    )
+    hotels = models.ManyToManyField(
+        "Hotel",
+        blank=True,
+        related_name="tour_packages",
+        verbose_name=_("Hotels"),
+    )
+    transfers = models.ManyToManyField(
+        "Transfer",
+        blank=True,
+        related_name="tour_packages",
+        verbose_name=_("Transfers"),
+    )
+    excursions = models.ManyToManyField(
+        "Excursion",
+        blank=True,
+        related_name="tour_packages",
+        verbose_name=_("Excursions"),
+    )
 
     class Meta:
         verbose_name = _("Tour Package")
@@ -202,6 +228,55 @@ class TourPackage(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.destination})"
+
+    def calculate_minimum_cost_floor(self):
+        if not self.pk:
+            return Decimal("0.00")
+
+        from finance.utils import convert_amount
+
+        floor = Decimal("0.00")
+        for flight in self.flights.all():
+            component_cost = flight.cost_price or Decimal("0.00")
+            floor += convert_amount(component_cost, flight.currency_id, self.currency_id)
+
+        for transfer in self.transfers.all():
+            component_cost = transfer.cost_price or Decimal("0.00")
+            floor += convert_amount(component_cost, transfer.currency_id, self.currency_id)
+
+        for excursion in self.excursions.all():
+            component_cost = excursion.cost_price or Decimal("0.00")
+            floor += convert_amount(component_cost, excursion.currency_id, self.currency_id)
+
+        nights_multiplier = self.nights if self.nights and self.nights > 0 else 1
+        for hotel in self.hotels.all():
+            component_cost = (hotel.cost_price or Decimal("0.00")) * nights_multiplier
+            floor += convert_amount(component_cost, hotel.currency_id, self.currency_id)
+
+        return floor.quantize(Decimal("0.01"))
+
+    def clean(self):
+        minimum_floor = self.calculate_minimum_cost_floor()
+
+        if self.cost_price is not None and self.cost_price < minimum_floor:
+            raise ValidationError({
+                "cost_price": _("Cost price cannot be lower than the minimum component cost floor.")
+            })
+
+        if self.agency_price is not None and self.agency_price < minimum_floor:
+            raise ValidationError({
+                "agency_price": _("Agency price cannot be lower than the minimum component cost floor.")
+            })
+
+        if self.public_price is not None and self.public_price < minimum_floor:
+            raise ValidationError({
+                "public_price": _("Public price cannot be lower than the minimum component cost floor.")
+            })
+
+        if self.public_price is not None and self.agency_price is not None and self.public_price < self.agency_price:
+            raise ValidationError({
+                "public_price": _("Public price cannot be lower than agency price.")
+            })
 
     def get_price_for_user(self, user):
         if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):

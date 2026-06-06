@@ -6,6 +6,7 @@ from .views import (
     AdminExchangeRateViewSet,
     AdminInvoiceViewSet,
     ClientCurrencyViewSet,
+    ClientCurrencyConvertView,
     ClientExchangeRateViewSet,
     ClientInvoiceViewSet,
 )
@@ -23,4 +24,5 @@ client_router.register(r"invoices", ClientInvoiceViewSet, basename="client-invoi
 urlpatterns = [
     path("admin/", include(admin_router.urls)),
     path("client/", include(client_router.urls)),
+    path("client/convert/", ClientCurrencyConvertView.as_view(), name="client-currency-convert"),
 ]

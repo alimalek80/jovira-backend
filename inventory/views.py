@@ -58,13 +58,23 @@ class ClientFlightViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class AdminTourPackageViewSet(viewsets.ModelViewSet):
-	queryset = TourPackage.objects.all().order_by("name")
+	queryset = TourPackage.objects.select_related("currency").prefetch_related(
+		"flights",
+		"hotels",
+		"transfers",
+		"excursions",
+	).order_by("name")
 	serializer_class = TourPackageSerializer
 	permission_classes = (IsAdminOrStaffRole,)
 
 
 class ClientTourPackageViewSet(viewsets.ReadOnlyModelViewSet):
-	queryset = TourPackage.objects.all().order_by("name")
+	queryset = TourPackage.objects.select_related("currency").prefetch_related(
+		"flights",
+		"hotels",
+		"transfers",
+		"excursions",
+	).order_by("name")
 	serializer_class = ClientTourPackageSerializer
 	permission_classes = (permissions.AllowAny,)
 
