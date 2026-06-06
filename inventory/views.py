@@ -1,5 +1,9 @@
 from rest_framework import permissions, viewsets
+from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+
+from django.db.models import Q, Sum
 
 from .models import Excursion, Flight, Hotel, HotelImage, HotelRoom, TourPackage, Transfer, TransferProvider
 from .permissions import IsAdminOrStaffRole
@@ -39,6 +43,49 @@ class AdminHotelRoomViewSet(viewsets.ModelViewSet):
 			qs = qs.filter(hotel_id=hotel_id)
 		return qs
 
+	@action(detail=True, methods=["get"], url_path="availability")
+	def availability(self, request, pk=None):
+		"""Return remaining available rooms split by status for a given date range.
+
+		Query params: check_in (YYYY-MM-DD), check_out (YYYY-MM-DD)
+		"""
+		room = self.get_object()
+		check_in = request.query_params.get("check_in")
+		check_out = request.query_params.get("check_out")
+
+		if not check_in or not check_out:
+			return Response(
+				{"detail": "check_in and check_out query parameters are required."},
+				status=400,
+			)
+
+		from reservations.models import HotelBooking
+		overlapping = HotelBooking.objects.filter(
+			~Q(status=HotelBooking.StatusChoices.CANCELLED),
+			hotel_room=room,
+			check_in_date__lt=check_out,
+			check_out_date__gt=check_in,
+		)
+		pending_qty = overlapping.filter(
+			status=HotelBooking.StatusChoices.PENDING
+		).aggregate(total=Sum("quantity"))["total"] or 0
+		confirmed_qty = overlapping.filter(
+			status=HotelBooking.StatusChoices.CONFIRMED
+		).aggregate(total=Sum("quantity"))["total"] or 0
+		booked_qty = pending_qty + confirmed_qty
+		return Response(
+			{
+				"hotel_room": room.pk,
+				"check_in": check_in,
+				"check_out": check_out,
+				"total_count": room.availability_count,
+				"confirmed_count": confirmed_qty,
+				"pending_count": pending_qty,
+				"booked_count": booked_qty,
+				"available_count": max(0, room.availability_count - booked_qty),
+			}
+		)
+
 
 class AdminHotelImageViewSet(viewsets.ModelViewSet):
 	queryset = HotelImage.objects.all().order_by("hotel", "order", "id")
@@ -71,6 +118,49 @@ class ClientHotelRoomViewSet(viewsets.ReadOnlyModelViewSet):
 		if hotel_id:
 			qs = qs.filter(hotel_id=hotel_id)
 		return qs
+
+	@action(detail=True, methods=["get"], url_path="availability")
+	def availability(self, request, pk=None):
+		"""Return remaining available rooms split by status for a given date range.
+
+		Query params: check_in (YYYY-MM-DD), check_out (YYYY-MM-DD)
+		"""
+		room = self.get_object()
+		check_in = request.query_params.get("check_in")
+		check_out = request.query_params.get("check_out")
+
+		if not check_in or not check_out:
+			return Response(
+				{"detail": "check_in and check_out query parameters are required."},
+				status=400,
+			)
+
+		from reservations.models import HotelBooking
+		overlapping = HotelBooking.objects.filter(
+			~Q(status=HotelBooking.StatusChoices.CANCELLED),
+			hotel_room=room,
+			check_in_date__lt=check_out,
+			check_out_date__gt=check_in,
+		)
+		pending_qty = overlapping.filter(
+			status=HotelBooking.StatusChoices.PENDING
+		).aggregate(total=Sum("quantity"))["total"] or 0
+		confirmed_qty = overlapping.filter(
+			status=HotelBooking.StatusChoices.CONFIRMED
+		).aggregate(total=Sum("quantity"))["total"] or 0
+		booked_qty = pending_qty + confirmed_qty
+		return Response(
+			{
+				"hotel_room": room.pk,
+				"check_in": check_in,
+				"check_out": check_out,
+				"total_count": room.availability_count,
+				"confirmed_count": confirmed_qty,
+				"pending_count": pending_qty,
+				"booked_count": booked_qty,
+				"available_count": max(0, room.availability_count - booked_qty),
+			}
+		)
 
 
 class AdminFlightViewSet(viewsets.ModelViewSet):

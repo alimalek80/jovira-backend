@@ -35,6 +35,18 @@ class HotelBookingSerializer(serializers.ModelSerializer):
             "check_in_date",
             "check_out_date",
             "quantity",
+            "status",
+            "selling_currency",
+            "price",
+            "agency_price",
+            "cost_currency",
+            "cost",
+            "cross_currency_rate",
+            "confirm_booking_number",
+            "agent_confirmation_number",
+            "hotel_cancellation_number",
+            "internal_note",
+            "remarks_for_hotel",
             "is_paid",
         )
         read_only_fields = ("id",)
@@ -44,6 +56,7 @@ class HotelBookingSerializer(serializers.ModelSerializer):
         quantity = attrs.get("quantity", getattr(self.instance, "quantity", 1))
         check_in_date = attrs.get("check_in_date", getattr(self.instance, "check_in_date", None))
         check_out_date = attrs.get("check_out_date", getattr(self.instance, "check_out_date", None))
+        status = attrs.get("status", getattr(self.instance, "status", HotelBooking.StatusChoices.PENDING))
 
         if hotel_room and check_in_date and check_out_date:
             if check_in_date >= check_out_date:
@@ -61,25 +74,27 @@ class HotelBookingSerializer(serializers.ModelSerializer):
                     }
                 )
 
-            from django.db.models import Sum
-            existing_qs = HotelBooking.objects.filter(
-                hotel_room=hotel_room,
-                check_in_date__lt=check_out_date,
-                check_out_date__gt=check_in_date,
-            )
-            if self.instance:
-                existing_qs = existing_qs.exclude(pk=self.instance.pk)
-            booked = existing_qs.aggregate(total=Sum("quantity"))["total"] or 0
-            available = hotel_room.availability_count - booked
-            if quantity > available:
-                raise serializers.ValidationError(
-                    {
-                        "quantity": (
-                            f"Not enough availability. Requested: {quantity}, "
-                            f"Available: {available}."
-                        )
-                    }
-                )
+            # Only check availability for non-cancelled bookings
+            if status != HotelBooking.StatusChoices.CANCELLED:
+                from django.db.models import Q, Sum
+                overlapping_qs = HotelBooking.objects.filter(
+                    hotel_room=hotel_room,
+                    check_in_date__lt=check_out_date,
+                    check_out_date__gt=check_in_date,
+                ).exclude(status=HotelBooking.StatusChoices.CANCELLED)
+                if self.instance:
+                    overlapping_qs = overlapping_qs.exclude(pk=self.instance.pk)
+                booked = overlapping_qs.aggregate(total=Sum("quantity"))["total"] or 0
+                available = hotel_room.availability_count - booked
+                if quantity > available:
+                    raise serializers.ValidationError(
+                        {
+                            "quantity": (
+                                f"Not enough availability. Requested: {quantity}, "
+                                f"Available: {available}."
+                            )
+                        }
+                    )
 
         return attrs
 

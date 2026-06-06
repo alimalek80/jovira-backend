@@ -104,6 +104,7 @@ Admin approval:
 - `GET, POST /api/v1/inventory/admin/hotel-rooms/`
 - `GET, PUT, PATCH, DELETE /api/v1/inventory/admin/hotel-rooms/{id}/`
   - Filter by hotel: `GET /api/v1/inventory/admin/hotel-rooms/?hotel=<id>`
+  - **Availability check:** `GET /api/v1/inventory/admin/hotel-rooms/{id}/availability/?check_in=YYYY-MM-DD&check_out=YYYY-MM-DD`
   - **HotelRoom fields:**
     - `hotel` (integer FK, required)
     - `room_type`: `SINGLE | DOUBLE | TRIPLE | FAMILY | SUITE`
@@ -202,6 +203,7 @@ Agency pricing behavior (flights, tour packages, excursions, transfers, hotel ro
 - `GET /api/v1/inventory/client/hotel-rooms/`
 - `GET /api/v1/inventory/client/hotel-rooms/{id}/`
   - Filter by hotel: `GET /api/v1/inventory/client/hotel-rooms/?hotel=<id>`
+  - **Availability check:** `GET /api/v1/inventory/client/hotel-rooms/{id}/availability/?check_in=YYYY-MM-DD&check_out=YYYY-MM-DD`
   - Returns `price` resolved by user role (public or agency price), no `cost_price`
 - `GET /api/v1/inventory/client/flights/`
 - `GET /api/v1/inventory/client/flights/{id}/`
@@ -272,12 +274,39 @@ Reservation and transfer notes:
 
 Hotel booking notes:
 - `HotelBooking.hotel_room` (FK to `HotelRoom`) replaces the old flat `hotel` FK.
-- `board_type` is now carried by `HotelRoom` — no separate field on `HotelBooking`.
+- `board_type` is carried by `HotelRoom` — no separate field on `HotelBooking`.
 - `quantity` specifies how many rooms of this type to reserve.
-- On create/update the serializer validates:
-  - `check_in_date` must be before `check_out_date`.
-  - Both dates must fall within `hotel_room.date_from` … `hotel_room.date_to`.
-  - `quantity` must not exceed `hotel_room.availability_count` minus already-booked overlapping quantities.
+- `status`: `PENDING | CONFIRMED | CANCELLED` (default: `PENDING`). Staff save rows as PENDING while building the reservation; a supervisor confirms them.
+- **Availability is tracked by decrementing `HotelRoom.availability_count` atomically on save using `F()` expressions.** No read-then-write — safe for concurrent staff sessions.
+  - Create (non-cancelled) → `availability_count -= quantity`
+  - Cancel → `availability_count += quantity`
+  - Delete → `availability_count += quantity`
+  - Quantity change → `availability_count -= (new_qty - old_qty)`
+  - Room change → old room restored, new room deducted
+- Financial fields: `selling_currency`, `price`, `agency_price`, `cost_currency`, `cost`, `cross_currency_rate`.
+- Tracking fields: `confirm_booking_number`, `agent_confirmation_number`, `hotel_cancellation_number`.
+- Note fields: `internal_note` (staff only), `remarks_for_hotel` (sent to hotel).
+- Serializer validates dates, date-range fit within room window, and available count (excluding CANCELLED bookings).
+
+Availability check endpoint:
+- `GET /api/v1/inventory/admin/hotel-rooms/{id}/availability/?check_in=YYYY-MM-DD&check_out=YYYY-MM-DD`
+- Also available on client: `GET /api/v1/inventory/client/hotel-rooms/{id}/availability/?check_in=...&check_out=...`
+- Response:
+```json
+{
+  "hotel_room": 7,
+  "check_in": "2026-07-15",
+  "check_out": "2026-07-22",
+  "total_count": 10,
+  "confirmed_count": 4,
+  "pending_count": 2,
+  "booked_count": 6,
+  "available_count": 4
+}
+```
+- `available_count` already reflects all active bookings (PENDING + CONFIRMED). CANCELLED bookings do not count.
+- Frontend should display: **"4 available · 2 pending · 4 confirmed"** so staff can see the queue.
+- For multiple unsaved rows in the same form session, subtract local pending quantities on the client side.
 
 Hotel booking create payload example:
 ```json
@@ -287,6 +316,18 @@ Hotel booking create payload example:
   "check_in_date": "2026-07-15",
   "check_out_date": "2026-07-22",
   "quantity": 2,
+  "status": "PENDING",
+  "selling_currency": 1,
+  "price": "240.00",
+  "agency_price": "200.00",
+  "cost_currency": 1,
+  "cost": "160.00",
+  "cross_currency_rate": "1.0000000000",
+  "confirm_booking_number": "",
+  "agent_confirmation_number": "JOV-H-0099",
+  "hotel_cancellation_number": "",
+  "internal_note": "VIP client, sea view preferred",
+  "remarks_for_hotel": "Late check-in after 22:00",
   "is_paid": false
 }
 ```
@@ -413,8 +454,13 @@ export type AdminTourPackagePayload = {
 // 3) Show warning text above price fields: "No-profit minimum floor: {minimum_cost_floor}".
 // 4) Prevent submit if entered prices are below floor.
 
-// HotelBooking payload: hotel_room (FK), check_in_date, check_out_date, quantity, is_paid
-// board_type is no longer on HotelBooking — it lives on HotelRoom
+// HotelBooking payload fields:
+// hotel_room (FK), check_in_date, check_out_date, quantity
+// selling_currency (FK), price, agency_price
+// cost_currency (FK), cost, cross_currency_rate
+// confirm_booking_number, agent_confirmation_number, hotel_cancellation_number
+// internal_note, remarks_for_hotel, is_paid
+// board_type lives on HotelRoom — not on HotelBooking
 export const RESERVATIONS_ENDPOINTS = {
   adminReservations: `${API_V1}/reservations/admin/reservations/`,
   clientReservations: `${API_V1}/reservations/client/reservations/`,

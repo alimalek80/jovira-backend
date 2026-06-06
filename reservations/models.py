@@ -113,6 +113,11 @@ class Tourist(models.Model):
 
 
 class HotelBooking(models.Model):
+    class StatusChoices(models.TextChoices):
+        PENDING = "PENDING", _("Pending")
+        CONFIRMED = "CONFIRMED", _("Confirmed")
+        CANCELLED = "CANCELLED", _("Cancelled")
+
     reservation = models.ForeignKey(
         Reservation,
         on_delete=models.CASCADE,
@@ -128,6 +133,61 @@ class HotelBooking(models.Model):
     check_in_date = models.DateField(_("Check-in Date"))
     check_out_date = models.DateField(_("Check-out Date"))
     quantity = models.PositiveIntegerField(_("Quantity"), default=1)
+    status = models.CharField(
+        _("Status"),
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.PENDING,
+    )
+
+    # Financials
+    selling_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="hotel_bookings_selling",
+        verbose_name=_("Selling Currency"),
+        null=True,
+        blank=True,
+    )
+    price = models.DecimalField(
+        _("Price"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    agency_price = models.DecimalField(
+        _("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cost_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="hotel_bookings_cost",
+        verbose_name=_("Cost Currency"),
+        null=True,
+        blank=True,
+    )
+    cost = models.DecimalField(
+        _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cross_currency_rate = models.DecimalField(
+        _("Cross Currency Rate"),
+        max_digits=15,
+        decimal_places=10,
+        default=Decimal("1.0000000000"),
+    )
+
+    # Tracking
+    confirm_booking_number = models.CharField(
+        _("Confirm Booking Number"), max_length=50, blank=True
+    )
+    agent_confirmation_number = models.CharField(
+        _("Agent Confirmation Number"), max_length=50, blank=True
+    )
+    hotel_cancellation_number = models.CharField(
+        _("Hotel Cancellation Number"), max_length=50, blank=True
+    )
+
+    # Notes
+    internal_note = models.TextField(_("Internal Note"), blank=True)
+    remarks_for_hotel = models.TextField(_("Remarks for Hotel"), blank=True)
+
     is_paid = models.BooleanField(_("Is Paid"), default=False)
 
     class Meta:

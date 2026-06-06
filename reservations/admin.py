@@ -37,10 +37,16 @@ class TouristAdmin(admin.ModelAdmin):
 
 @admin.register(HotelBooking)
 class HotelBookingAdmin(admin.ModelAdmin):
-	list_display = ('reservation', 'hotel_room', 'check_in_date', 'check_out_date', 'quantity', 'is_paid')
-	list_filter = ('is_paid', 'check_in_date')
-	search_fields = ('reservation__reservation_number', 'hotel_room__hotel__name')
-	autocomplete_fields = ('reservation', 'hotel_room')
+	list_display = ('reservation', 'hotel_room', 'check_in_date', 'check_out_date', 'quantity', 'status', 'selling_currency', 'price', 'cost', 'is_paid')
+	list_filter = ('status', 'is_paid', 'check_in_date', 'selling_currency')
+	search_fields = ('reservation__reservation_number', 'hotel_room__hotel__name', 'confirm_booking_number', 'agent_confirmation_number')
+	autocomplete_fields = ('reservation', 'hotel_room', 'selling_currency', 'cost_currency')
+	fieldsets = (
+		('Booking', {'fields': ('reservation', 'hotel_room', 'check_in_date', 'check_out_date', 'quantity', 'status', 'is_paid')}),
+		('Financials', {'fields': ('selling_currency', 'price', 'agency_price', 'cost_currency', 'cost', 'cross_currency_rate')}),
+		('Tracking', {'fields': ('confirm_booking_number', 'agent_confirmation_number', 'hotel_cancellation_number')}),
+		('Notes', {'fields': ('internal_note', 'remarks_for_hotel')}),
+	)
 
 
 @admin.register(FlightTicket)
