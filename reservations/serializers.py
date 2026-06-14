@@ -48,15 +48,42 @@ class HotelBookingSerializer(serializers.ModelSerializer):
             "internal_note",
             "remarks_for_hotel",
             "is_paid",
+            "tourists",
         )
         read_only_fields = ("id",)
 
     def validate(self, attrs):
+        reservation = attrs.get("reservation", getattr(self.instance, "reservation", None))
         hotel_room = attrs.get("hotel_room", getattr(self.instance, "hotel_room", None))
         quantity = attrs.get("quantity", getattr(self.instance, "quantity", 1))
         check_in_date = attrs.get("check_in_date", getattr(self.instance, "check_in_date", None))
         check_out_date = attrs.get("check_out_date", getattr(self.instance, "check_out_date", None))
         status = attrs.get("status", getattr(self.instance, "status", HotelBooking.StatusChoices.PENDING))
+        tourists = attrs.get("tourists", None)
+
+        if reservation:
+            if tourists is not None:
+                invalid_tourists = [t.id for t in tourists if t.reservation_id != reservation.id]
+                if invalid_tourists:
+                    raise serializers.ValidationError(
+                        {"tourists": f"All tourists must belong to the selected reservation. Invalid tourist IDs: {invalid_tourists}"}
+                    )
+
+                if hotel_room:
+                    # Capacity validation
+                    CAPACITY_MAP = {
+                        "SINGLE": 1,
+                        "DOUBLE": 2,
+                        "TRIPLE": 3,
+                        "FAMILY": 4,
+                        "SUITE": 4,
+                    }
+                    capacity_per_room = CAPACITY_MAP.get(hotel_room.room_type, 2)
+                    max_capacity = capacity_per_room * quantity
+                    if len(tourists) > max_capacity:
+                        raise serializers.ValidationError(
+                            {"tourists": f"The number of tourists ({len(tourists)}) exceeds the maximum capacity ({max_capacity}) for {quantity} {hotel_room.get_room_type_display()} room(s)."}
+                        )
 
         if hotel_room and check_in_date and check_out_date:
             if check_in_date >= check_out_date:

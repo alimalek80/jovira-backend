@@ -1,180 +1,432 @@
-from rest_framework import permissions, viewsets
-from django.db.models import F
+from django.db.models import F, Q
 
+from rest_framework import permissions, viewsets
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
+
+from accounts.permissions import (
+    IsReservationEditorOrReadOnlyIfLocked,
+    IsReservationOperationsRole,
+    IsReservationWorkflowRole,
+    ReadOnlyOrReservationOperationsRole,
+)
 from inventory.models import HotelRoom
-from .models import ExcursionBooking, ExcursionService, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
+
+from .models import (
+    ExcursionBooking,
+    ExcursionService,
+    FlightTicket,
+    HotelBooking,
+    Reservation,
+    Tourist,
+    TransferService,
+)
 from .serializers import (
-	ExcursionBookingSerializer,
-	ExcursionServiceSerializer,
-	FlightTicketSerializer,
-	HotelBookingSerializer,
-	ReservationSerializer,
-	TouristSerializer,
-	TransferServiceSerializer,
+    ExcursionBookingSerializer,
+    ExcursionServiceSerializer,
+    FlightTicketSerializer,
+    HotelBookingSerializer,
+    ReservationSerializer,
+    TouristSerializer,
+    TransferServiceSerializer,
 )
 
 
-class AdminReservationViewSet(viewsets.ModelViewSet):
-	queryset = Reservation.objects.all().order_by("-created_at")
-	serializer_class = ReservationSerializer
-	permission_classes = (permissions.IsAdminUser,)
-
-
-class ClientReservationViewSet(viewsets.ModelViewSet):
-	queryset = Reservation.objects.all().order_by("-created_at")
-	serializer_class = ReservationSerializer
-	permission_classes = (permissions.IsAuthenticated,)
-
-
-class AdminTouristViewSet(viewsets.ModelViewSet):
-	queryset = Tourist.objects.all().order_by("id")
-	serializer_class = TouristSerializer
-	permission_classes = (permissions.IsAdminUser,)
-
-
-class ClientTouristViewSet(viewsets.ModelViewSet):
-	queryset = Tourist.objects.all().order_by("id")
-	serializer_class = TouristSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+class PreventHardDeleteMixin:
+    def destroy(self, request, *args, **kwargs):
+        raise MethodNotAllowed(
+            "DELETE",
+            detail="Hard deletion is disabled. Please use the cancellation workflow instead.",
+        )
 
 
 def _adjust_availability(hotel_room_id, delta):
-	"""Atomically adjust HotelRoom.availability_count by delta (positive = restore, negative = deduct)."""
-	if delta != 0:
-		HotelRoom.objects.filter(pk=hotel_room_id).update(
-			availability_count=F("availability_count") + delta
-		)
+    if delta != 0:
+        HotelRoom.objects.filter(pk=hotel_room_id).update(
+            availability_count=F("availability_count") + delta
+        )
 
 
-class AdminHotelBookingViewSet(viewsets.ModelViewSet):
-	queryset = HotelBooking.objects.select_related(
-		"hotel_room__hotel", "selling_currency", "cost_currency"
-	).order_by("check_in_date")
-	serializer_class = HotelBookingSerializer
-	permission_classes = (permissions.IsAdminUser,)
+def _is_internal_reservation_user(user):
+    if not user or not user.is_authenticated:
+        return False
 
-	def perform_create(self, serializer):
-		booking = serializer.save()
-		if booking.status != HotelBooking.StatusChoices.CANCELLED:
-			_adjust_availability(booking.hotel_room_id, -booking.quantity)
+    if user.is_superuser or user.is_staff:
+        return True
 
-	def perform_destroy(self, instance):
-		if instance.status != HotelBooking.StatusChoices.CANCELLED:
-			_adjust_availability(instance.hotel_room_id, +instance.quantity)
-		instance.delete()
+    return user.role in {
+        user.RoleChoices.ADMIN,
+        user.RoleChoices.SALES,
+        user.RoleChoices.RESERVATION,
+        user.RoleChoices.FINANCE,
+    }
 
-	def perform_update(self, serializer):
-		old_qty = serializer.instance.quantity
-		old_status = serializer.instance.status
-		old_room_id = serializer.instance.hotel_room_id
 
-		booking = serializer.save()
+def _empty_q(prefix=""):
+    if prefix:
+        return Q(**{f"{prefix}pk__isnull": True})
+    return Q(pk__isnull=True)
 
-		was_active = old_status != HotelBooking.StatusChoices.CANCELLED
-		is_active = booking.status != HotelBooking.StatusChoices.CANCELLED
 
-		# Room changed — restore old room, deduct new room
-		if old_room_id != booking.hotel_room_id:
-			if was_active:
-				_adjust_availability(old_room_id, +old_qty)
-			if is_active:
-				_adjust_availability(booking.hotel_room_id, -booking.quantity)
-		else:
-			if was_active and not is_active:
-				# Cancelled — restore
-				_adjust_availability(booking.hotel_room_id, +old_qty)
-			elif not was_active and is_active:
-				# Re-activated — deduct
-				_adjust_availability(booking.hotel_room_id, -booking.quantity)
-			elif is_active and old_qty != booking.quantity:
-				# Quantity changed — adjust difference
-				_adjust_availability(booking.hotel_room_id, -(booking.quantity - old_qty))
+def _reservation_owner_q(user, prefix=""):
+    if not user or not user.is_authenticated:
+        return _empty_q(prefix)
+
+    if _is_internal_reservation_user(user):
+        return Q()
+
+    reservation_field_names = {
+        field.name for field in Reservation._meta.get_fields()
+    }
+
+    owner_q = Q()
+    has_owner_filter = False
+
+    if getattr(user, "role", None) == user.RoleChoices.AGENCY and getattr(user, "agency_id", None):
+        if "agency" in reservation_field_names:
+            owner_q |= Q(**{f"{prefix}agency_id": user.agency_id})
+            has_owner_filter = True
+
+    if "user" in reservation_field_names:
+        owner_q |= Q(**{f"{prefix}user_id": user.id})
+        has_owner_filter = True
+
+    if "customer" in reservation_field_names:
+        owner_q |= Q(**{f"{prefix}customer_id": user.id})
+        has_owner_filter = True
+
+    if has_owner_filter:
+        return owner_q
+
+    return _empty_q(prefix)
+
+
+def _filter_by_reservation_access(queryset, request, prefix=""):
+    user = request.user
+
+    if not user or not user.is_authenticated:
+        return queryset.none()
+
+    if _is_internal_reservation_user(user):
+        return queryset
+
+    return queryset.filter(_reservation_owner_q(user, prefix=prefix))
+
+
+def _ensure_reservation_is_editable_for_request(request, reservation):
+    user = request.user
+
+    if not reservation:
+        return
+
+    if not getattr(reservation, "is_locked_by_finance", False):
+        return
+
+    if user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN:
+        return
+
+    raise PermissionDenied(
+        "This reservation is locked by finance and cannot be modified by this role."
+    )
+
+
+class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = Reservation.objects.all().order_by("-created_at")
+    serializer_class = ReservationSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            permission_classes = (IsReservationOperationsRole,)
+        else:
+            permission_classes = (
+                IsReservationWorkflowRole,
+                IsReservationEditorOrReadOnlyIfLocked,
+            )
+
+        return [permission() for permission in permission_classes]
+
+
+class ClientReservationViewSet(viewsets.ModelViewSet):
+    queryset = Reservation.objects.all().order_by("-created_at")
+    serializer_class = ReservationSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request)
+
+
+class AdminTouristViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = Tourist.objects.select_related("reservation").order_by("id")
+    serializer_class = TouristSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
+
+
+class ClientTouristViewSet(viewsets.ModelViewSet):
+    queryset = Tourist.objects.select_related("reservation").order_by("id")
+    serializer_class = TouristSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request, prefix="reservation__")
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
+
+
+class AdminHotelBookingViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = HotelBooking.objects.select_related(
+        "reservation",
+        "hotel_room__hotel",
+        "selling_currency",
+        "cost_currency",
+    ).prefetch_related("tourists").order_by("check_in_date")
+    serializer_class = HotelBookingSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+
+        booking = serializer.save()
+
+        if booking.status != HotelBooking.StatusChoices.CANCELLED:
+            _adjust_availability(booking.hotel_room_id, -booking.quantity)
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+
+        old_qty = serializer.instance.quantity
+        old_status = serializer.instance.status
+        old_room_id = serializer.instance.hotel_room_id
+
+        booking = serializer.save()
+
+        was_active = old_status != HotelBooking.StatusChoices.CANCELLED
+        is_active = booking.status != HotelBooking.StatusChoices.CANCELLED
+
+        if old_room_id != booking.hotel_room_id:
+            if was_active:
+                _adjust_availability(old_room_id, +old_qty)
+
+            if is_active:
+                _adjust_availability(booking.hotel_room_id, -booking.quantity)
+
+        else:
+            if was_active and not is_active:
+                _adjust_availability(booking.hotel_room_id, +old_qty)
+
+            elif not was_active and is_active:
+                _adjust_availability(booking.hotel_room_id, -booking.quantity)
+
+            elif is_active and old_qty != booking.quantity:
+                _adjust_availability(
+                    booking.hotel_room_id,
+                    -(booking.quantity - old_qty),
+                )
 
 
 class ClientHotelBookingViewSet(viewsets.ModelViewSet):
-	queryset = HotelBooking.objects.select_related(
-		"hotel_room__hotel", "selling_currency", "cost_currency"
-	).order_by("check_in_date")
-	serializer_class = HotelBookingSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+    queryset = HotelBooking.objects.select_related(
+        "reservation",
+        "hotel_room__hotel",
+        "selling_currency",
+        "cost_currency",
+    ).prefetch_related("tourists").order_by("check_in_date")
+    serializer_class = HotelBookingSerializer
+    permission_classes = (permissions.IsAuthenticated,)
 
-	def perform_create(self, serializer):
-		booking = serializer.save()
-		if booking.status != HotelBooking.StatusChoices.CANCELLED:
-			_adjust_availability(booking.hotel_room_id, -booking.quantity)
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request, prefix="reservation__")
 
-	def perform_destroy(self, instance):
-		if instance.status != HotelBooking.StatusChoices.CANCELLED:
-			_adjust_availability(instance.hotel_room_id, +instance.quantity)
-		instance.delete()
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
 
-	def perform_update(self, serializer):
-		old_qty = serializer.instance.quantity
-		old_status = serializer.instance.status
-		old_room_id = serializer.instance.hotel_room_id
+        booking = serializer.save()
 
-		booking = serializer.save()
+        if booking.status != HotelBooking.StatusChoices.CANCELLED:
+            _adjust_availability(booking.hotel_room_id, -booking.quantity)
 
-		was_active = old_status != HotelBooking.StatusChoices.CANCELLED
-		is_active = booking.status != HotelBooking.StatusChoices.CANCELLED
+    def perform_destroy(self, instance):
+        if instance.status != HotelBooking.StatusChoices.CANCELLED:
+            _adjust_availability(instance.hotel_room_id, +instance.quantity)
 
-		if old_room_id != booking.hotel_room_id:
-			if was_active:
-				_adjust_availability(old_room_id, +old_qty)
-			if is_active:
-				_adjust_availability(booking.hotel_room_id, -booking.quantity)
-		else:
-			if was_active and not is_active:
-				_adjust_availability(booking.hotel_room_id, +old_qty)
-			elif not was_active and is_active:
-				_adjust_availability(booking.hotel_room_id, -booking.quantity)
-			elif is_active and old_qty != booking.quantity:
-				_adjust_availability(booking.hotel_room_id, -(booking.quantity - old_qty))
+        instance.delete()
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+
+        old_qty = serializer.instance.quantity
+        old_status = serializer.instance.status
+        old_room_id = serializer.instance.hotel_room_id
+
+        booking = serializer.save()
+
+        was_active = old_status != HotelBooking.StatusChoices.CANCELLED
+        is_active = booking.status != HotelBooking.StatusChoices.CANCELLED
+
+        if old_room_id != booking.hotel_room_id:
+            if was_active:
+                _adjust_availability(old_room_id, +old_qty)
+
+            if is_active:
+                _adjust_availability(booking.hotel_room_id, -booking.quantity)
+
+        else:
+            if was_active and not is_active:
+                _adjust_availability(booking.hotel_room_id, +old_qty)
+
+            elif not was_active and is_active:
+                _adjust_availability(booking.hotel_room_id, -booking.quantity)
+
+            elif is_active and old_qty != booking.quantity:
+                _adjust_availability(
+                    booking.hotel_room_id,
+                    -(booking.quantity - old_qty),
+                )
 
 
-class AdminFlightTicketViewSet(viewsets.ModelViewSet):
-	queryset = FlightTicket.objects.all().order_by("id")
-	serializer_class = FlightTicketSerializer
-	permission_classes = (permissions.IsAdminUser,)
+class AdminFlightTicketViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = FlightTicket.objects.select_related(
+        "reservation",
+        "flight",
+        "tourist",
+    ).order_by("id")
+    serializer_class = FlightTicketSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
 class ClientFlightTicketViewSet(viewsets.ModelViewSet):
-	queryset = FlightTicket.objects.all().order_by("id")
-	serializer_class = FlightTicketSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+    queryset = FlightTicket.objects.select_related(
+        "reservation",
+        "flight",
+        "tourist",
+    ).order_by("id")
+    serializer_class = FlightTicketSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request, prefix="reservation__")
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
-class AdminExcursionBookingViewSet(viewsets.ModelViewSet):
-	queryset = ExcursionBooking.objects.all().order_by("tour_date")
-	serializer_class = ExcursionBookingSerializer
-	permission_classes = (permissions.IsAdminUser,)
+class AdminExcursionBookingViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = ExcursionBooking.objects.select_related(
+        "reservation",
+        "excursion",
+    ).prefetch_related("tourists").order_by("tour_date")
+    serializer_class = ExcursionBookingSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
 class ClientExcursionBookingViewSet(viewsets.ModelViewSet):
-	queryset = ExcursionBooking.objects.all().order_by("tour_date")
-	serializer_class = ExcursionBookingSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+    queryset = ExcursionBooking.objects.select_related(
+        "reservation",
+        "excursion",
+    ).prefetch_related("tourists").order_by("tour_date")
+    serializer_class = ExcursionBookingSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request, prefix="reservation__")
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
-class AdminTransferServiceViewSet(viewsets.ModelViewSet):
-	queryset = TransferService.objects.all().order_by("service_date", "id")
-	serializer_class = TransferServiceSerializer
-	permission_classes = (permissions.IsAdminUser,)
+class AdminTransferServiceViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = TransferService.objects.select_related(
+        "reservation",
+        "transfer",
+        "tour_package",
+        "currency",
+    ).prefetch_related("passengers").order_by("service_date", "id")
+    serializer_class = TransferServiceSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
 class ClientTransferServiceViewSet(viewsets.ModelViewSet):
-	queryset = TransferService.objects.all().order_by("service_date", "id")
-	serializer_class = TransferServiceSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+    queryset = TransferService.objects.select_related(
+        "reservation",
+        "transfer",
+        "tour_package",
+        "currency",
+    ).prefetch_related("passengers").order_by("service_date", "id")
+    serializer_class = TransferServiceSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return _filter_by_reservation_access(qs, self.request, prefix="reservation__")
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        serializer.save()
 
 
-class AdminExcursionServiceViewSet(viewsets.ModelViewSet):
-	queryset = ExcursionService.objects.all().order_by("-excursion_date")
-	serializer_class = ExcursionServiceSerializer
-	permission_classes = (permissions.IsAdminUser,)
+class AdminExcursionServiceViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+    queryset = ExcursionService.objects.select_related(
+        "excursion",
+        "selling_currency",
+        "cost_currency",
+    ).order_by("-excursion_date")
+    serializer_class = ExcursionServiceSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
 
 
 class ClientExcursionServiceViewSet(viewsets.ModelViewSet):
-	queryset = ExcursionService.objects.all().order_by("-excursion_date")
-	serializer_class = ExcursionServiceSerializer
-	permission_classes = (permissions.IsAuthenticated,)
+    queryset = ExcursionService.objects.select_related(
+        "excursion",
+        "selling_currency",
+        "cost_currency",
+    ).order_by("-excursion_date")
+    serializer_class = ExcursionServiceSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if _is_internal_reservation_user(user):
+            return qs
+
+        return qs.none()

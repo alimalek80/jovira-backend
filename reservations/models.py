@@ -45,6 +45,12 @@ class Reservation(models.Model):
         related_name="reservations",
         verbose_name=_("Tour Package"),
     )
+    # New field for Ping-Pong workflow
+    is_locked_by_finance = models.BooleanField(
+        _("Locked by Finance"),
+        default=False,
+        help_text=_("When true, only Finance/Admin users can modify this reservation. Sales/Reservation staff get read-only access.")
+    )
 
     class Meta:
         verbose_name = _("Reservation")
@@ -138,6 +144,12 @@ class HotelBooking(models.Model):
         max_length=20,
         choices=StatusChoices.choices,
         default=StatusChoices.PENDING,
+    )
+    tourists = models.ManyToManyField(
+        Tourist,
+        related_name="hotel_bookings",
+        verbose_name=_("Tourists"),
+        blank=True,
     )
 
     # Financials
