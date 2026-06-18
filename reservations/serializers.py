@@ -1,7 +1,15 @@
 from rest_framework import serializers
 
-from .models import ExcursionBooking, ExcursionService, FlightTicket, HotelBooking, Reservation, Tourist, TransferService
-
+from .models import (
+    ExcursionBooking,
+    ExcursionService,
+    FlightTicket,
+    HotelBooking,
+    Reservation,
+    ReservationActivityLog,
+    Tourist,
+    TransferService,
+)
 
 class TouristSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
@@ -222,6 +230,31 @@ class TransferServiceSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class ReservationActivityLogSerializer(serializers.ModelSerializer):
+    actor_email = serializers.EmailField(source="actor.email", read_only=True)
+    actor_role = serializers.CharField(source="actor.role", read_only=True)
+    reservation_number = serializers.CharField(
+        source="reservation.reservation_number",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ReservationActivityLog
+        fields = (
+            "id",
+            "reservation",
+            "reservation_number",
+            "actor",
+            "actor_email",
+            "actor_role",
+            "action",
+            "message",
+            "metadata",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
 class ReservationSerializer(serializers.ModelSerializer):
     tourists = TouristSerializer(many=True, required=False)
     hotel_bookings = HotelBookingSerializer(many=True, read_only=True)
@@ -242,6 +275,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             "hotel_bookings",
             "flight_tickets",
             "transfer_services",
+            "is_locked_by_finance",
         )
         read_only_fields = ("id", "created_at")
         extra_kwargs = {

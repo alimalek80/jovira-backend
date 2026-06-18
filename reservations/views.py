@@ -17,6 +17,7 @@ from .models import (
     FlightTicket,
     HotelBooking,
     Reservation,
+    ReservationActivityLog,
     Tourist,
     TransferService,
 )
@@ -28,6 +29,7 @@ from .serializers import (
     ReservationSerializer,
     TouristSerializer,
     TransferServiceSerializer,
+    ReservationActivityLogSerializer,
 )
 
 
@@ -128,6 +130,39 @@ def _ensure_reservation_is_editable_for_request(request, reservation):
         "This reservation is locked by finance and cannot be modified by this role."
     )
 
+def _create_reservation_activity_log(request, reservation, action, message="", metadata=None):
+    if not reservation:
+        return None
+
+    user = getattr(request, "user", None)
+
+    if not user or not user.is_authenticated:
+        user = None
+
+    return ReservationActivityLog.objects.create(
+        reservation=reservation,
+        actor=user,
+        action=action,
+        message=message,
+        metadata=metadata or {},
+    )
+
+def _hotel_booking_log_metadata(booking):
+    return {
+        "hotel_booking_id": booking.id,
+        "hotel_room_id": booking.hotel_room_id,
+        "hotel_name": getattr(getattr(booking.hotel_room, "hotel", None), "name", ""),
+        "room_type": getattr(booking.hotel_room, "room_type", ""),
+        "board_type": getattr(booking.hotel_room, "board_type", ""),
+        "check_in_date": str(booking.check_in_date),
+        "check_out_date": str(booking.check_out_date),
+        "quantity": booking.quantity,
+        "status": booking.status,
+        "confirm_booking_number": booking.confirm_booking_number,
+        "agent_confirmation_number": booking.agent_confirmation_number,
+        "hotel_cancellation_number": booking.hotel_cancellation_number,
+        "updated_fields": [],
+    }
 
 class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
     queryset = Reservation.objects.all().order_by("-created_at")
@@ -143,6 +178,91 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
             )
 
         return [permission() for permission in permission_classes]
+
+    def perform_create(self, serializer):
+        reservation = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            reservation,
+            ReservationActivityLog.ActionChoices.CREATED,
+            "Reservation was created.",
+            {
+                "status": reservation.status,
+                "agency_id": reservation.agency_id,
+                "tour_package_id": reservation.tour_package_id,
+            },
+        )
+
+    def perform_update(self, serializer):
+        old_status = serializer.instance.status
+        old_is_locked_by_finance = serializer.instance.is_locked_by_finance
+
+        reservation = serializer.save()
+
+        if old_status != reservation.status:
+            _create_reservation_activity_log(
+                self.request,
+                reservation,
+                ReservationActivityLog.ActionChoices.STATUS_CHANGED,
+                "Reservation status was changed.",
+                {
+                    "old_status": old_status,
+                    "new_status": reservation.status,
+                },
+            )
+            return
+
+        if old_is_locked_by_finance != reservation.is_locked_by_finance:
+            action = (
+                ReservationActivityLog.ActionChoices.FINANCE_LOCKED
+                if reservation.is_locked_by_finance
+                else ReservationActivityLog.ActionChoices.FINANCE_UNLOCKED
+            )
+            message = (
+                "Reservation was locked by finance."
+                if reservation.is_locked_by_finance
+                else "Reservation was unlocked by finance."
+            )
+
+            _create_reservation_activity_log(
+                self.request,
+                reservation,
+                action,
+                message,
+                {
+                    "old_is_locked_by_finance": old_is_locked_by_finance,
+                    "new_is_locked_by_finance": reservation.is_locked_by_finance,
+                },
+            )
+            return
+
+        _create_reservation_activity_log(
+            self.request,
+            reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Reservation was updated.",
+            {
+                "updated_fields": list(self.request.data.keys()),
+            },
+        )
+
+class AdminReservationActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ReservationActivityLog.objects.select_related(
+        "reservation",
+        "actor",
+    ).order_by("-created_at")
+    serializer_class = ReservationActivityLogSerializer
+    permission_classes = (IsReservationWorkflowRole,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        reservation_id = self.request.query_params.get("reservation")
+
+        if reservation_id:
+            queryset = queryset.filter(reservation_id=reservation_id)
+
+        return queryset
 
 
 class ClientReservationViewSet(viewsets.ModelViewSet):
@@ -200,6 +320,14 @@ class AdminHotelBookingViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
         if booking.status != HotelBooking.StatusChoices.CANCELLED:
             _adjust_availability(booking.hotel_room_id, -booking.quantity)
 
+        _create_reservation_activity_log(
+            self.request,
+            booking.reservation,
+            ReservationActivityLog.ActionChoices.HOTEL_BOOKING_ADDED,
+            "Hotel booking was added.",
+            _hotel_booking_log_metadata(booking),
+        )
+
     def perform_update(self, serializer):
         _ensure_reservation_is_editable_for_request(
             self.request,
@@ -234,6 +362,29 @@ class AdminHotelBookingViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
                     booking.hotel_room_id,
                     -(booking.quantity - old_qty),
                 )
+
+        action = ReservationActivityLog.ActionChoices.HOTEL_BOOKING_UPDATED
+        message = "Hotel booking was updated."
+
+        if old_status != booking.status and booking.status == HotelBooking.StatusChoices.CANCELLED:
+            message = "Hotel booking was cancelled."
+
+        metadata = _hotel_booking_log_metadata(booking)
+        metadata["old_status"] = old_status
+        metadata["new_status"] = booking.status
+        metadata["old_quantity"] = old_qty
+        metadata["new_quantity"] = booking.quantity
+        metadata["old_hotel_room_id"] = old_room_id
+        metadata["new_hotel_room_id"] = booking.hotel_room_id
+        metadata["updated_fields"] = list(self.request.data.keys())
+
+        _create_reservation_activity_log(
+            self.request,
+            booking.reservation,
+            action,
+            message,
+            metadata,
+        )
 
 
 class ClientHotelBookingViewSet(viewsets.ModelViewSet):

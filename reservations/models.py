@@ -1,5 +1,5 @@
 from decimal import Decimal
-
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -59,6 +59,58 @@ class Reservation(models.Model):
 
     def __str__(self):
         return self.reservation_number
+
+
+class ReservationActivityLog(models.Model):
+    class ActionChoices(models.TextChoices):
+        CREATED = "CREATED", _("Created")
+        UPDATED = "UPDATED", _("Updated")
+        STATUS_CHANGED = "STATUS_CHANGED", _("Status Changed")
+        FINANCE_LOCKED = "FINANCE_LOCKED", _("Finance Locked")
+        FINANCE_UNLOCKED = "FINANCE_UNLOCKED", _("Finance Unlocked")
+        TOURIST_ADDED = "TOURIST_ADDED", _("Tourist Added")
+        HOTEL_BOOKING_ADDED = "HOTEL_BOOKING_ADDED", _("Hotel Booking Added")
+        HOTEL_BOOKING_UPDATED = "HOTEL_BOOKING_UPDATED", _("Hotel Booking Updated")
+        FLIGHT_TICKET_ADDED = "FLIGHT_TICKET_ADDED", _("Flight Ticket Added")
+        TRANSFER_SERVICE_ADDED = "TRANSFER_SERVICE_ADDED", _("Transfer Service Added")
+        EXCURSION_BOOKING_ADDED = "EXCURSION_BOOKING_ADDED", _("Excursion Booking Added")
+        EXCURSION_SERVICE_ADDED = "EXCURSION_SERVICE_ADDED", _("Excursion Service Added")
+
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.CASCADE,
+        related_name="activity_logs",
+        verbose_name=_("Reservation"),
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reservation_activity_logs",
+        verbose_name=_("Actor"),
+    )
+    action = models.CharField(
+        _("Action"),
+        max_length=50,
+        choices=ActionChoices.choices,
+    )
+    message = models.TextField(_("Message"), blank=True)
+    metadata = models.JSONField(_("Metadata"), default=dict, blank=True)
+    created_at = models.DateTimeField(_("Created At"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Reservation Activity Log")
+        verbose_name_plural = _("Reservation Activity Logs")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["reservation", "-created_at"]),
+            models.Index(fields=["actor", "-created_at"]),
+            models.Index(fields=["action"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reservation.reservation_number} - {self.action}"
 
 
 class Tourist(models.Model):
