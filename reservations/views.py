@@ -1,7 +1,9 @@
 from django.db.models import F, Q
 
 from rest_framework import permissions, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
+from rest_framework.response import Response
 
 from accounts.permissions import (
     IsReservationEditorOrReadOnlyIfLocked,
@@ -220,6 +222,34 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
             )
 
         return [permission() for permission in permission_classes]
+
+    @action(detail=False, methods=["get"], url_path="work-desk")
+    def work_desk(self, request):
+        queryset = self.get_queryset().filter(
+            status__in=[
+                Reservation.StatusChoices.DRAFT,
+                Reservation.StatusChoices.ON_PROCESS,
+            ]
+        )
+
+        reservation_number = request.query_params.get("reservation_number")
+        status_value = request.query_params.get("status")
+
+        if reservation_number:
+            queryset = queryset.filter(
+                reservation_number__icontains=reservation_number
+            )
+
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         reservation = serializer.save()
