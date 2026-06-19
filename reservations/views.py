@@ -233,15 +233,36 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
         )
 
         reservation_number = request.query_params.get("reservation_number")
+        rf_number = request.query_params.get("rf_number")
         status_value = request.query_params.get("status")
+        agency_id = request.query_params.get("agency")
+        tour_package_id = request.query_params.get("tour_package")
+        is_locked_by_finance = request.query_params.get("is_locked_by_finance")
 
-        if reservation_number:
+        search_number = reservation_number or rf_number
+
+        if search_number:
             queryset = queryset.filter(
-                reservation_number__icontains=reservation_number
+                reservation_number__icontains=search_number
             )
 
         if status_value:
             queryset = queryset.filter(status=status_value)
+
+        if agency_id:
+            queryset = queryset.filter(agency_id=agency_id)
+
+        if tour_package_id:
+            queryset = queryset.filter(tour_package_id=tour_package_id)
+
+        if is_locked_by_finance is not None:
+            normalized_locked_value = is_locked_by_finance.strip().lower()
+
+            if normalized_locked_value in {"true", "1", "yes"}:
+                queryset = queryset.filter(is_locked_by_finance=True)
+
+            if normalized_locked_value in {"false", "0", "no"}:
+                queryset = queryset.filter(is_locked_by_finance=False)
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -250,6 +271,7 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
 
     def perform_create(self, serializer):
         reservation = serializer.save()
