@@ -164,6 +164,48 @@ def _hotel_booking_log_metadata(booking):
         "updated_fields": [],
     }
 
+def _flight_ticket_log_metadata(ticket, updated_fields=None):
+    return {
+        "flight_ticket_id": ticket.id,
+        "flight_id": ticket.flight_id,
+        "flight_number": getattr(ticket.flight, "flight_number", ""),
+        "tourist_id": ticket.tourist_id,
+        "tourist_name": str(ticket.tourist) if ticket.tourist_id else "",
+        "ticket_number": ticket.ticket_number,
+        "pnr_code": ticket.pnr_code,
+        "updated_fields": updated_fields or [],
+    }
+
+def _transfer_service_log_metadata(service, updated_fields=None):
+    return {
+        "transfer_service_id": service.id,
+        "transfer_id": service.transfer_id,
+        "tour_package_id": service.tour_package_id,
+        "service_name": service.service_name,
+        "service_date": str(service.service_date),
+        "on_arrival": service.on_arrival,
+        "on_departure": service.on_departure,
+        "from_location_type": service.from_location_type,
+        "from_location_name": service.from_location_name,
+        "to_location_type": service.to_location_type,
+        "to_location_name": service.to_location_name,
+        "price": str(service.price),
+        "agency_price": str(service.agency_price) if service.agency_price is not None else None,
+        "currency_id": service.currency_id,
+        "updated_fields": updated_fields or [],
+    }
+
+def _excursion_booking_log_metadata(booking, updated_fields=None):
+    return {
+        "excursion_booking_id": booking.id,
+        "excursion_id": booking.excursion_id,
+        "excursion_name": getattr(booking.excursion, "name", ""),
+        "tour_date": str(booking.tour_date),
+        "pickup_time": str(booking.pickup_time) if booking.pickup_time else None,
+        "tourist_ids": list(booking.tourists.values_list("id", flat=True)),
+        "updated_fields": updated_fields or [],
+    }
+
 class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
     queryset = Reservation.objects.all().order_by("-created_at")
     serializer_class = ReservationSerializer
@@ -464,8 +506,35 @@ class AdminFlightTicketViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         reservation = serializer.validated_data.get("reservation")
         _ensure_reservation_is_editable_for_request(self.request, reservation)
-        serializer.save()
 
+        ticket = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            ticket.reservation,
+            ReservationActivityLog.ActionChoices.FLIGHT_TICKET_ADDED,
+            "Flight ticket was added.",
+            _flight_ticket_log_metadata(ticket),
+        )
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+
+        ticket = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            ticket.reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Flight ticket was updated.",
+            _flight_ticket_log_metadata(
+                ticket,
+                updated_fields=list(self.request.data.keys()),
+            ),
+        )
 
 class ClientFlightTicketViewSet(viewsets.ModelViewSet):
     queryset = FlightTicket.objects.select_related(
@@ -497,8 +566,35 @@ class AdminExcursionBookingViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet
     def perform_create(self, serializer):
         reservation = serializer.validated_data.get("reservation")
         _ensure_reservation_is_editable_for_request(self.request, reservation)
-        serializer.save()
 
+        booking = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            booking.reservation,
+            ReservationActivityLog.ActionChoices.EXCURSION_BOOKING_ADDED,
+            "Excursion booking was added.",
+            _excursion_booking_log_metadata(booking),
+        )
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+
+        booking = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            booking.reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Excursion booking was updated.",
+            _excursion_booking_log_metadata(
+                booking,
+                updated_fields=list(self.request.data.keys()),
+            ),
+        )
 
 class ClientExcursionBookingViewSet(viewsets.ModelViewSet):
     queryset = ExcursionBooking.objects.select_related(
@@ -531,8 +627,35 @@ class AdminTransferServiceViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet)
     def perform_create(self, serializer):
         reservation = serializer.validated_data.get("reservation")
         _ensure_reservation_is_editable_for_request(self.request, reservation)
-        serializer.save()
 
+        service = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            service.reservation,
+            ReservationActivityLog.ActionChoices.TRANSFER_SERVICE_ADDED,
+            "Transfer service was added.",
+            _transfer_service_log_metadata(service),
+        )
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+
+        service = serializer.save()
+
+        _create_reservation_activity_log(
+            self.request,
+            service.reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Transfer service was updated.",
+            _transfer_service_log_metadata(
+                service,
+                updated_fields=list(self.request.data.keys()),
+            ),
+        )
 
 class ClientTransferServiceViewSet(viewsets.ModelViewSet):
     queryset = TransferService.objects.select_related(
