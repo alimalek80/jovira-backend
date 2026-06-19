@@ -232,6 +232,7 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
             ]
         )
 
+        category = request.query_params.get("category", "active_reservations")
         reservation_number = request.query_params.get("reservation_number")
         rf_number = request.query_params.get("rf_number")
         status_value = request.query_params.get("status")
@@ -240,6 +241,24 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
         is_locked_by_finance = request.query_params.get("is_locked_by_finance")
 
         search_number = reservation_number or rf_number
+
+        normalized_category = category.strip().lower()
+
+        empty_placeholder_categories = {
+            "pins",
+            "reminders",
+            "received_requests",
+            "sent_requests",
+        }
+
+        if normalized_category in empty_placeholder_categories:
+            queryset = queryset.none()
+
+        if normalized_category not in {
+            "active_reservations",
+            *empty_placeholder_categories,
+        }:
+            queryset = queryset.none()
 
         if search_number:
             queryset = queryset.filter(
