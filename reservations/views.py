@@ -239,6 +239,7 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
         agency_id = request.query_params.get("agency")
         tour_package_id = request.query_params.get("tour_package")
         is_locked_by_finance = request.query_params.get("is_locked_by_finance")
+        only_me = request.query_params.get("only_me")
 
         search_number = reservation_number or rf_number
 
@@ -282,6 +283,15 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
 
             if normalized_locked_value in {"false", "0", "no"}:
                 queryset = queryset.filter(is_locked_by_finance=False)
+
+        if only_me is not None:
+            normalized_only_me_value = only_me.strip().lower()
+
+            if normalized_only_me_value in {"true", "1", "yes"}:
+                queryset = queryset.filter(assigned_to=request.user)
+
+            if normalized_only_me_value in {"false", "0", "no"}:
+                queryset = queryset.exclude(assigned_to=request.user)
 
         page = self.paginate_queryset(queryset)
         if page is not None:
