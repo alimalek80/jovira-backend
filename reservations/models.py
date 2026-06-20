@@ -37,6 +37,15 @@ class Reservation(models.Model):
         null=True,
         blank=True,
     )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="assigned_reservations",
+        verbose_name=_("Assigned To"),
+        null=True,
+        blank=True,
+        help_text=_("The internal staff member currently responsible for handling this reservation."),
+    )
     tour_package = models.ForeignKey(
         TourPackage,
         on_delete=models.SET_NULL,
