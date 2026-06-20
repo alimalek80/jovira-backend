@@ -260,6 +260,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     hotel_bookings = HotelBookingSerializer(many=True, read_only=True)
     flight_tickets = FlightTicketSerializer(many=True, read_only=True)
     transfer_services = TransferServiceSerializer(many=True, read_only=True)
+    assigned_to_email = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -270,6 +272,9 @@ class ReservationSerializer(serializers.ModelSerializer):
             "currency",
             "status",
             "agency",
+            "assigned_to",
+            "assigned_to_email",
+            "assigned_to_name",
             "tour_package",
             "tourists",
             "hotel_bookings",
@@ -281,7 +286,20 @@ class ReservationSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "agency": {"required": False, "allow_null": True},
             "tour_package": {"required": False, "allow_null": True},
+            "assigned_to": {"required": False, "allow_null": True},
         }
+    
+    def get_assigned_to_email(self, obj):
+        if not obj.assigned_to:
+            return None
+        return obj.assigned_to.email
+
+    def get_assigned_to_name(self, obj):
+        if not obj.assigned_to:
+            return None
+
+        full_name = obj.assigned_to.get_full_name().strip()
+        return full_name or obj.assigned_to.email
 
     def validate(self, attrs):
         request = self.context.get("request")
