@@ -305,8 +305,18 @@ class ReservationSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = request.user if request else None
 
-        # Admin endpoints can explicitly set any agency value.
-        if not user or not user.is_authenticated or user.is_staff or user.is_superuser:
+        if not user or not user.is_authenticated:
+            return attrs
+
+        internal_roles = {
+            "ADMIN",
+            "SALES",
+            "RESERVATION",
+            "INVENTORY",
+            "FINANCE",
+        }
+
+        if user.is_staff or user.is_superuser or getattr(user, "role", None) in internal_roles:
             return attrs
 
         provided_agency = attrs.get("agency", getattr(self.instance, "agency", None))
@@ -322,7 +332,6 @@ class ReservationSerializer(serializers.ModelSerializer):
                 )
             attrs["agency"] = user.agency
         else:
-            # NORMAL users create direct reservations without agency.
             attrs["agency"] = None
 
         return attrs
