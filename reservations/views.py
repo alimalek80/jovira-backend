@@ -300,6 +300,39 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    
+    @action(detail=True, methods=["post"], url_path="take")
+    def take(self, request, pk=None):
+        reservation = self.get_object()
+        user = request.user
+
+        is_admin = user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN
+
+        if reservation.assigned_to_id and reservation.assigned_to_id != user.id and not is_admin:
+            raise PermissionDenied(
+                "This reservation is already assigned to another user."
+            )
+
+        old_assigned_to_id = reservation.assigned_to_id
+
+        reservation.assigned_to = user
+        reservation.save(update_fields=["assigned_to"])
+
+        _create_reservation_activity_log(
+            request,
+            reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Reservation was taken by a staff member.",
+            {
+                "old_assigned_to_id": old_assigned_to_id,
+                "new_assigned_to_id": user.id,
+                "new_assigned_to_email": user.email,
+            },
+        )
+
+        serializer = self.get_serializer(reservation)
+        return Response(serializer.data)
     
 
     def perform_create(self, serializer):
