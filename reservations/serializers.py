@@ -308,6 +308,17 @@ class ReservationSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             return attrs
 
+        is_admin = user.is_staff or user.is_superuser or getattr(user, "role", None) == "ADMIN"
+
+        if (
+            self.instance
+            and self.instance.status == Reservation.StatusChoices.CONFIRMED
+            and not is_admin
+        ):
+            raise serializers.ValidationError(
+                "This reservation is confirmed and locked. Only ADMIN can modify it."
+            )
+
         internal_roles = {
             "ADMIN",
             "SALES",
