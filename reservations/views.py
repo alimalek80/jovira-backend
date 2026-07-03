@@ -334,6 +334,37 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(reservation)
         return Response(serializer.data)
     
+    @action(detail=True, methods=["post"], url_path="confirm")
+    def confirm(self, request, pk=None):
+        reservation = self.get_object()
+        user = request.user
+
+        is_admin = user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN
+        is_reservation_staff = user.role == user.RoleChoices.RESERVATION
+
+        if not (is_admin or is_reservation_staff):
+            raise PermissionDenied(
+                "Only ADMIN or RESERVATION roles can confirm a reservation."
+            )
+
+        old_status = reservation.status
+
+        reservation.status = Reservation.StatusChoices.CONFIRMED
+        reservation.save(update_fields=["status"])
+
+        _create_reservation_activity_log(
+            request,
+            reservation,
+            ReservationActivityLog.ActionChoices.STATUS_CHANGED,
+            "Reservation was confirmed.",
+            {
+                "old_status": old_status,
+                "new_status": reservation.status,
+            },
+        )
+
+        serializer = self.get_serializer(reservation)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         reservation = serializer.save()
