@@ -11,6 +11,19 @@ from .models import (
     TransferService,
 )
 
+
+class FlightTicketFlightSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    flight_number = serializers.CharField(read_only=True)
+    airline = serializers.CharField(read_only=True)
+
+
+class FlightTicketTouristSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+
+
 class TouristSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
 
@@ -137,8 +150,26 @@ class HotelBookingSerializer(serializers.ModelSerializer):
 class FlightTicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = FlightTicket
-        fields = ("id", "reservation", "flight", "tourist", "ticket_number", "pnr_code")
+        fields = (
+            "id",
+            "reservation",
+            "flight",
+            "tourist",
+            "ticket_number",
+            "pnr_code",
+            "departure_date",
+            "arrival_date",
+            "price",
+            "currency",
+            "paid",
+        )
         read_only_fields = ("id",)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["flight"] = FlightTicketFlightSummarySerializer(instance.flight).data
+        data["tourist"] = FlightTicketTouristSummarySerializer(instance.tourist).data
+        return data
 
 
 class ExcursionBookingSerializer(serializers.ModelSerializer):

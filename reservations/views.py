@@ -647,7 +647,7 @@ class ClientHotelBookingViewSet(viewsets.ModelViewSet):
                 )
 
 
-class AdminFlightTicketViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
+class AdminFlightTicketViewSet(viewsets.ModelViewSet):
     queryset = FlightTicket.objects.select_related(
         "reservation",
         "flight",
@@ -687,6 +687,19 @@ class AdminFlightTicketViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
                 ticket,
                 updated_fields=list(self.request.data.keys()),
             ),
+        )
+
+    def perform_destroy(self, instance):
+        _ensure_reservation_is_editable_for_request(self.request, instance.reservation)
+        reservation = instance.reservation
+        metadata = _flight_ticket_log_metadata(instance)
+        instance.delete()
+        _create_reservation_activity_log(
+            self.request,
+            reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            "Flight ticket was deleted.",
+            metadata,
         )
 
 class ClientFlightTicketViewSet(viewsets.ModelViewSet):

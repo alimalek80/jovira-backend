@@ -293,6 +293,32 @@ class FlightTicket(models.Model):
     )
     ticket_number = models.CharField(_("Ticket Number"), max_length=100, blank=True)
     pnr_code = models.CharField(_("PNR Code"), max_length=50, blank=True)
+    departure_date = models.DateField(
+        _("Departure Date"),
+        null=True,
+        blank=True,
+    )
+    arrival_date = models.DateField(
+        _("Arrival Date"),
+        null=True,
+        blank=True,
+    )
+    price = models.DecimalField(
+        _("Price"),
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="flight_tickets",
+        verbose_name=_("Currency"),
+        null=True,
+        blank=True,
+    )
+    paid = models.BooleanField(_("Paid"), default=False)
 
     class Meta:
         verbose_name = _("Flight Ticket")
