@@ -15,6 +15,14 @@ def _has_any_role(user, allowed_roles):
     return user.role in allowed_roles
 
 
+def _reservation_is_locked_for_operations(reservation):
+    if not reservation:
+        return False
+
+    status = str(getattr(reservation, "status", "")).strip().upper()
+    return bool(getattr(reservation, "is_locked_by_finance", False)) or status == "CONFIRMED"
+
+
 class IsAdminRole(permissions.BasePermission):
     """
     Allows access to Superusers, Django Staff, and ADMIN role.
@@ -205,7 +213,7 @@ class ReadOnlyOrReservationOperationsRole(permissions.BasePermission):
 
         related_reservation = getattr(obj, "reservation", None)
 
-        if related_reservation and getattr(related_reservation, "is_locked_by_finance", False):
+        if related_reservation and _reservation_is_locked_for_operations(related_reservation):
             return False
 
         return user.role in {
@@ -243,6 +251,7 @@ class IsReservationEditorOrReadOnlyIfLocked(permissions.BasePermission):
             return True
 
         is_locked_by_finance = getattr(obj, "is_locked_by_finance", False)
+        is_locked_for_operations = _reservation_is_locked_for_operations(obj)
 
         if user.role == user.RoleChoices.FINANCE:
             return is_locked_by_finance
@@ -251,6 +260,6 @@ class IsReservationEditorOrReadOnlyIfLocked(permissions.BasePermission):
             user.RoleChoices.SALES,
             user.RoleChoices.RESERVATION,
         }:
-            return not is_locked_by_finance
+            return not is_locked_for_operations
 
         return False

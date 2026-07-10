@@ -122,11 +122,19 @@ def _ensure_reservation_is_editable_for_request(request, reservation):
     if not reservation:
         return
 
-    if not getattr(reservation, "is_locked_by_finance", False):
+    is_locked_by_finance = getattr(reservation, "is_locked_by_finance", False)
+    is_confirmed = getattr(reservation, "status", None) == Reservation.StatusChoices.CONFIRMED
+
+    if not is_locked_by_finance and not is_confirmed:
         return
 
     if user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN:
         return
+
+    if is_confirmed:
+        raise PermissionDenied(
+            "This reservation is confirmed and cannot be modified by this role."
+        )
 
     raise PermissionDenied(
         "This reservation is locked by finance and cannot be modified by this role."
