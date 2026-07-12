@@ -6,6 +6,7 @@ from .views import (
     AdminExcursionServiceViewSet,
     AdminFlightTicketViewSet,
     AdminHotelBookingViewSet,
+    AdminOtherServiceViewSet,
     AdminReservationViewSet,
     AdminTransferServiceViewSet,
     AdminTouristViewSet,
@@ -27,6 +28,7 @@ admin_router.register(r"flight-tickets", AdminFlightTicketViewSet, basename="adm
 admin_router.register(r"excursion-bookings", AdminExcursionBookingViewSet, basename="admin-excursion-bookings")
 admin_router.register(r"transfer-services", AdminTransferServiceViewSet, basename="admin-transfer-services")
 admin_router.register(r"excursion-services", AdminExcursionServiceViewSet, basename="admin-excursion-services")
+admin_router.register(r"other-services", AdminOtherServiceViewSet, basename="admin-other-services")
 admin_router.register(
     r"reservation-activity-logs",
     AdminReservationActivityLogViewSet,

@@ -9,6 +9,7 @@ from .models import (
     ReservationActivityLog,
     Tourist,
     TransferService,
+    OtherService,
 )
 
 
@@ -417,6 +418,24 @@ class ReservationSerializer(serializers.ModelSerializer):
 
         return instance
 
+class OtherServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OtherService
+        fields = (
+            "id",
+            "reservation",
+            "system_date",
+            "service_date",
+            "service_name",
+            "selling_currency",
+            "cost_currency",
+            "cross_currency_rate",
+            "price",
+            "cost",
+            "is_paid",
+            "note",
+        )
+        read_only_fields = ("id", "system_date")
 
 class ExcursionServiceSerializer(serializers.ModelSerializer):
     class Meta:

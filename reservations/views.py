@@ -22,11 +22,13 @@ from .models import (
     ReservationActivityLog,
     Tourist,
     TransferService,
+    OtherService,
 )
 from .serializers import (
     ExcursionBookingSerializer,
     ExcursionServiceSerializer,
     FlightTicketSerializer,
+    OtherServiceSerializer,
     HotelBookingSerializer,
     ReservationSerializer,
     TouristSerializer,
@@ -700,6 +702,62 @@ class AdminFlightTicketViewSet(viewsets.ModelViewSet):
             ReservationActivityLog.ActionChoices.UPDATED,
             "Flight ticket was deleted.",
             metadata,
+        )
+
+
+class AdminOtherServiceViewSet(viewsets.ModelViewSet):
+    queryset = OtherService.objects.select_related(
+        "reservation",
+        "selling_currency",
+        "cost_currency",
+    ).order_by("-system_date")
+    serializer_class = OtherServiceSerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        reservation_id = self.request.query_params.get("reservation")
+        if reservation_id:
+            queryset = queryset.filter(reservation_id=reservation_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        reservation = serializer.validated_data.get("reservation")
+        _ensure_reservation_is_editable_for_request(self.request, reservation)
+        service = serializer.save()
+        _create_reservation_activity_log(
+            self.request,
+            service.reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            f"Other service '{service.service_name}' was added.",
+            {"service_id": service.id, "service_name": service.service_name},
+        )
+
+    def perform_update(self, serializer):
+        _ensure_reservation_is_editable_for_request(
+            self.request,
+            serializer.instance.reservation,
+        )
+        service = serializer.save()
+        _create_reservation_activity_log(
+            self.request,
+            service.reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            f"Other service '{service.service_name}' was updated.",
+            {"service_id": service.id, "service_name": service.service_name},
+        )
+
+    def perform_destroy(self, instance):
+        _ensure_reservation_is_editable_for_request(self.request, instance.reservation)
+        reservation = instance.reservation
+        service_name = instance.service_name
+        instance.delete()
+        _create_reservation_activity_log(
+            self.request,
+            reservation,
+            ReservationActivityLog.ActionChoices.UPDATED,
+            f"Other service '{service_name}' was deleted.",
+            {"service_name": service_name},
         )
 
 class ClientFlightTicketViewSet(viewsets.ModelViewSet):

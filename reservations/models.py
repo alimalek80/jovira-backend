@@ -328,6 +328,54 @@ class FlightTicket(models.Model):
     def __str__(self):
         return f"{self.reservation.reservation_number} - {self.flight.flight_number}"
 
+class OtherService(models.Model):
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.CASCADE,
+        related_name="other_services",
+        verbose_name=_("Reservation"),
+    )
+    system_date = models.DateTimeField(_("System Date"), auto_now_add=True)
+    service_date = models.DateField(_("Service Date"))
+    service_name = models.CharField(_("Service Name"), max_length=255)
+    selling_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="other_services_selling",
+        verbose_name=_("Selling Currency"),
+        null=True,
+        blank=True,
+    )
+    cost_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="other_services_cost",
+        verbose_name=_("Cost Currency"),
+        null=True,
+        blank=True,
+    )
+    cross_currency_rate = models.DecimalField(
+        _("Cross Currency Rate"),
+        max_digits=15,
+        decimal_places=10,
+        default=Decimal("1.0000000000"),
+    )
+    price = models.DecimalField(
+        _("Price"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cost = models.DecimalField(
+        _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    is_paid = models.BooleanField(_("Is Paid"), default=False)
+    note = models.TextField(_("Note"), blank=True)
+
+    class Meta:
+        verbose_name = _("Other Service")
+        verbose_name_plural = _("Other Services")
+        ordering = ("-system_date",)
+
+    def __str__(self):
+        return f"{self.reservation.reservation_number} - {self.service_name}"
 
 class ExcursionBooking(models.Model):
     reservation = models.ForeignKey(
