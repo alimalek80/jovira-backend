@@ -319,6 +319,23 @@ class FlightTicket(models.Model):
         blank=True,
     )
     paid = models.BooleanField(_("Paid"), default=False)
+    cost = models.DecimalField(
+        _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cost_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="flight_tickets_cost",
+        verbose_name=_("Cost Currency"),
+        null=True,
+        blank=True,
+    )
+    cross_currency_rate = models.DecimalField(
+        _("Cross Currency Rate"),
+        max_digits=15,
+        decimal_places=10,
+        default=Decimal("1.0000000000"),
+    )
 
     class Meta:
         verbose_name = _("Flight Ticket")
@@ -453,6 +470,23 @@ class TransferService(models.Model):
     to_location_name = models.CharField(_("To Location Name"), max_length=255)
     price = models.DecimalField(_("Price"), max_digits=12, decimal_places=2)
     agency_price = models.DecimalField(_("Agency Price"), max_digits=12, decimal_places=2, null=True, blank=True)
+    cost = models.DecimalField(
+        _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    cost_currency = models.ForeignKey(
+        "finance.Currency",
+        on_delete=models.PROTECT,
+        related_name="transfer_services_cost",
+        verbose_name=_("Cost Currency"),
+        null=True,
+        blank=True,
+    )
+    cross_currency_rate = models.DecimalField(
+        _("Cross Currency Rate"),
+        max_digits=15,
+        decimal_places=10,
+        default=Decimal("1.0000000000"),
+    )
     currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,

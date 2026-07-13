@@ -163,6 +163,9 @@ class FlightTicketSerializer(serializers.ModelSerializer):
             "price",
             "currency",
             "paid",
+            "cost",
+            "cost_currency",
+            "cross_currency_rate",
         )
         read_only_fields = ("id",)
 
@@ -199,6 +202,9 @@ class TransferServiceSerializer(serializers.ModelSerializer):
             "price",
             "agency_price",
             "currency",
+            "cost",
+            "cost_currency",
+            "cross_currency_rate",
             "passengers",
             "external_note",
             "driver_note",
