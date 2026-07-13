@@ -375,6 +375,86 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(reservation)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=["get"], url_path="financial-summary")
+    def financial_summary(self, request, pk=None):
+        reservation = self.get_object()
+
+        from decimal import Decimal, InvalidOperation
+        from collections import defaultdict
+
+        def to_decimal(value):
+            try:
+                return Decimal(str(value)) if value is not None else Decimal("0")
+            except (InvalidOperation, TypeError):
+                return Decimal("0")
+
+        def get_currency_code(currency_fk):
+            if currency_fk is None:
+                return None
+            return getattr(currency_fk, "code", None) or getattr(currency_fk, "iso_code", None) or str(currency_fk.id)
+
+        # selling[currency_code] = total selling amount
+        # cost[currency_code] = total cost amount
+        selling = defaultdict(Decimal)
+        cost = defaultdict(Decimal)
+
+        # Hotel bookings
+        for booking in reservation.hotel_bookings.select_related("selling_currency", "cost_currency").all():
+            if booking.status == HotelBooking.StatusChoices.CANCELLED:
+                continue
+            sel_cur = get_currency_code(booking.selling_currency)
+            cost_cur = get_currency_code(booking.cost_currency)
+            if sel_cur and booking.price:
+                selling[sel_cur] += to_decimal(booking.price) * booking.quantity
+            if cost_cur and booking.cost:
+                cost[cost_cur] += to_decimal(booking.cost) * booking.quantity
+
+        # Transfer services
+        for service in reservation.transfer_services.select_related("currency", "cost_currency").all():
+            sel_cur = get_currency_code(service.currency)
+            cost_cur = get_currency_code(service.cost_currency)
+            if sel_cur and service.price:
+                selling[sel_cur] += to_decimal(service.price)
+            if cost_cur and service.cost:
+                cost[cost_cur] += to_decimal(service.cost)
+
+        # Flight tickets
+        for ticket in reservation.flight_tickets.select_related("currency", "cost_currency").all():
+            sel_cur = get_currency_code(ticket.currency)
+            cost_cur = get_currency_code(ticket.cost_currency)
+            if sel_cur and ticket.price:
+                selling[sel_cur] += to_decimal(ticket.price)
+            if cost_cur and ticket.cost:
+                cost[cost_cur] += to_decimal(ticket.cost)
+
+        # Other services
+        for service in reservation.other_services.select_related("selling_currency", "cost_currency").all():
+            sel_cur = get_currency_code(service.selling_currency)
+            cost_cur = get_currency_code(service.cost_currency)
+            if sel_cur and service.price:
+                selling[sel_cur] += to_decimal(service.price)
+            if cost_cur and service.cost:
+                cost[cost_cur] += to_decimal(service.cost)
+
+        # Build per-currency breakdown with margin
+        all_currencies = set(selling.keys()) | set(cost.keys())
+        breakdown = []
+        for currency in sorted(all_currencies):
+            sel = selling.get(currency, Decimal("0"))
+            cst = cost.get(currency, Decimal("0"))
+            breakdown.append({
+                "currency": currency,
+                "total_selling": str(sel.quantize(Decimal("0.01"))),
+                "total_cost": str(cst.quantize(Decimal("0.01"))),
+                "margin": str((sel - cst).quantize(Decimal("0.01"))),
+            })
+
+        return Response({
+            "reservation_id": reservation.id,
+            "reservation_number": reservation.reservation_number,
+            "breakdown": breakdown,
+        })
 
     def perform_create(self, serializer):
         reservation = serializer.save()
