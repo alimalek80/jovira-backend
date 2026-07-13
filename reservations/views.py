@@ -455,6 +455,79 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
             "reservation_number": reservation.reservation_number,
             "breakdown": breakdown,
         })
+    
+    @action(detail=True, methods=["post"], url_path="ping-pong")
+    def ping_pong(self, request, pk=None):
+        reservation = self.get_object()
+        user = request.user
+
+        is_admin = user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN
+        is_finance = user.role == user.RoleChoices.FINANCE
+        is_reservation = user.role == user.RoleChoices.RESERVATION
+
+        # Only ADMIN, FINANCE, and RESERVATION roles can use this action.
+        if not (is_admin or is_finance or is_reservation):
+            raise PermissionDenied(
+                "Only ADMIN, FINANCE, or RESERVATION roles can use the Ping-Pong action."
+            )
+
+        # Determine direction:
+        # - RESERVATION staff sends TO finance (ping): locks the reservation
+        # - FINANCE or ADMIN sends BACK to reservation (pong): unlocks it
+        direction = request.data.get("direction", "ping")
+
+        if direction == "ping":
+            # Only RESERVATION or ADMIN can ping (send to finance)
+            if not (is_reservation or is_admin):
+                raise PermissionDenied(
+                    "Only RESERVATION or ADMIN roles can send to Finance."
+                )
+            if reservation.is_locked_by_finance:
+                return Response(
+                    {"detail": "This reservation is already with Finance."},
+                    status=400,
+                )
+            reservation.is_locked_by_finance = True
+            reservation.save(update_fields=["is_locked_by_finance"])
+            message = "Reservation was sent to Finance (Ping)."
+            action_choice = ReservationActivityLog.ActionChoices.FINANCE_LOCKED
+
+        elif direction == "pong":
+            # Only FINANCE or ADMIN can pong (send back to reservation)
+            if not (is_finance or is_admin):
+                raise PermissionDenied(
+                    "Only FINANCE or ADMIN roles can send back to Reservation."
+                )
+            if not reservation.is_locked_by_finance:
+                return Response(
+                    {"detail": "This reservation is not currently with Finance."},
+                    status=400,
+                )
+            reservation.is_locked_by_finance = False
+            reservation.save(update_fields=["is_locked_by_finance"])
+            message = "Reservation was returned to Reservation team (Pong)."
+            action_choice = ReservationActivityLog.ActionChoices.FINANCE_UNLOCKED
+
+        else:
+            return Response(
+                {"detail": "Invalid direction. Use 'ping' or 'pong'."},
+                status=400,
+            )
+
+        _create_reservation_activity_log(
+            request,
+            reservation,
+            action_choice,
+            message,
+            {
+                "direction": direction,
+                "triggered_by": user.email,
+                "is_locked_by_finance": reservation.is_locked_by_finance,
+            },
+        )
+
+        serializer = self.get_serializer(reservation)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         reservation = serializer.save()
