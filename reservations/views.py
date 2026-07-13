@@ -528,6 +528,43 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(reservation)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=["get"], url_path="finance-queue")
+    def finance_queue(self, request):
+        user = request.user
+
+        is_admin = user.is_superuser or user.is_staff or user.role == user.RoleChoices.ADMIN
+        is_finance = user.role == user.RoleChoices.FINANCE
+
+        if not (is_admin or is_finance):
+            raise PermissionDenied(
+                "Only ADMIN or FINANCE roles can access the finance queue."
+            )
+
+        queryset = self.get_queryset().filter(is_locked_by_finance=True)
+
+        reservation_number = request.query_params.get("reservation_number")
+        agency_id = request.query_params.get("agency")
+        status_value = request.query_params.get("status")
+
+        if reservation_number:
+            queryset = queryset.filter(
+                reservation_number__icontains=reservation_number
+            )
+
+        if agency_id:
+            queryset = queryset.filter(agency_id=agency_id)
+
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         reservation = serializer.save()
