@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ViewSet
 
 from accounts.permissions import IsAdminRole
-from .models import EmailConfig
+from .models import EmailConfig, ReservationEmail
 from .serializers import (
     EmailConfigSerializer,
     EmailConfigReadSerializer,
@@ -96,15 +96,17 @@ class ReservationEmailViewSet(ViewSet):
     @action(detail=False, methods=['post'], url_path='send')
     def send(self, request):
         """
-        Send an email using the active EmailConfig.
+        Send an email using the active EmailConfig and save a history record.
         POST /api/v1/settings/reservation-email/send/
         Body: {
+            "reservation_id": 123,
             "to": "hotel@example.com",
             "cc": "optional@example.com",
             "subject": "Reservation request #12345",
             "body": "Dear Sir/Madam..."
         }
         """
+        reservation_id = request.data.get('reservation_id')
         to = request.data.get('to', '').strip()
         cc = request.data.get('cc', '').strip()
         subject = request.data.get('subject', '').strip()
@@ -136,6 +138,25 @@ class ReservationEmailViewSet(ViewSet):
         use_tls = config.encryption == EmailConfig.ENCRYPTION_TLS
         use_ssl = config.encryption == EmailConfig.ENCRYPTION_SSL
 
+        from_address = (
+            f'{config.from_name} <{config.from_email}>'
+            if config.from_name
+            else config.from_email
+        )
+
+        recipient_list = [to]
+        if cc:
+            recipient_list.append(cc)
+
+        # Attempt to resolve reservation for history logging
+        reservation = None
+        if reservation_id:
+            try:
+                from reservations.models import Reservation
+                reservation = Reservation.objects.get(pk=reservation_id)
+            except Exception:
+                pass
+
         try:
             connection = get_connection(
                 backend='django.core.mail.backends.smtp.EmailBackend',
@@ -147,16 +168,6 @@ class ReservationEmailViewSet(ViewSet):
                 use_ssl=use_ssl,
             )
 
-            from_address = (
-                f'{config.from_name} <{config.from_email}>'
-                if config.from_name
-                else config.from_email
-            )
-
-            recipient_list = [to]
-            if cc:
-                recipient_list.append(cc)
-
             send_mail(
                 subject=subject,
                 message=body,
@@ -166,13 +177,60 @@ class ReservationEmailViewSet(ViewSet):
                 fail_silently=False,
             )
 
+            # Save successful email history record
+            if reservation:
+                ReservationEmail.objects.create(
+                    reservation=reservation,
+                    sent_by=request.user,
+                    to_address=to,
+                    cc_address=cc,
+                    subject=subject,
+                    body=body,
+                    is_successful=True,
+                )
+
             return Response(
                 {'detail': f'Email sent successfully to {to}.'},
                 status=status.HTTP_200_OK,
             )
 
         except Exception as exc:
+            # Save failed email history record
+            if reservation:
+                ReservationEmail.objects.create(
+                    reservation=reservation,
+                    sent_by=request.user,
+                    to_address=to,
+                    cc_address=cc,
+                    subject=subject,
+                    body=body,
+                    is_successful=False,
+                    error_message=str(exc),
+                )
+
             return Response(
                 {'detail': f'Failed to send email: {str(exc)}'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+class ReservationEmailHistoryViewSet(ViewSet):
+    """
+    Read-only email history per reservation.
+    GET /api/v1/settings/reservation-email-history/?reservation={id}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        from .serializers import ReservationEmailSerializer
+        reservation_id = request.query_params.get('reservation')
+        if not reservation_id:
+            return Response(
+                {'detail': 'reservation query parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        emails = ReservationEmail.objects.filter(
+            reservation_id=reservation_id
+        ).select_related('sent_by').order_by('-sent_at')
+        serializer = ReservationEmailSerializer(emails, many=True)
+        return Response(serializer.data)

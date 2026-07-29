@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import EmailConfig
+from .models import EmailConfig, ReservationEmail
 
 
 class EmailConfigSerializer(serializers.ModelSerializer):
@@ -55,3 +55,29 @@ class TestEmailSerializer(serializers.Serializer):
     recipient = serializers.EmailField(
         help_text='Email address to send the test message to',
     )
+
+class ReservationEmailSerializer(serializers.ModelSerializer):
+    sent_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReservationEmail
+        fields = [
+            'id',
+            'reservation',
+            'sent_by',
+            'sent_by_name',
+            'direction',
+            'to_address',
+            'cc_address',
+            'subject',
+            'body',
+            'sent_at',
+            'is_successful',
+            'error_message',
+        ]
+        read_only_fields = fields
+
+    def get_sent_by_name(self, obj):
+        if obj.sent_by:
+            return obj.sent_by.get_full_name() or obj.sent_by.email
+        return None
