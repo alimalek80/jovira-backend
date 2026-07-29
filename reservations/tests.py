@@ -1,11 +1,15 @@
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
 
+from accounts.models import CustomUser
 from agencies.models import Agency
 from finance.models import Currency
 from inventory.models import Flight, Hotel, TourPackage
 
-from .models import Reservation, Tourist
+from .models import FlightTicket, Reservation, Tourist
 from .serializers import (
 	FlightTicketSerializer,
 	HotelBookingSerializer,
@@ -169,3 +173,83 @@ class TransferServiceSerializerTests(TestCase):
 		serializer = TransferServiceSerializer(data=payload)
 
 		self.assertTrue(serializer.is_valid(), serializer.errors)
+
+	def test_flight_ticket_serializer_expands_flight_and_tourist_in_output(self):
+		reservation = Reservation.objects.create(
+			reservation_number="RSV-1006",
+			currency=self.currency,
+			agency=self.agency,
+		)
+		tourist = Tourist.objects.create(
+			reservation=reservation,
+			first_name="Lina",
+			last_name="Kaya",
+			sex=Tourist.SexChoices.FEMALE,
+			age_type=Tourist.AgeTypeChoices.ADULT,
+		)
+		ticket = FlightTicket.objects.create(
+			reservation=reservation,
+			flight=self.flight,
+			tourist=tourist,
+			ticket_number="TK-5544",
+			pnr_code="ABCD12",
+		)
+
+		data = FlightTicketSerializer(instance=ticket).data
+
+		self.assertEqual(data["flight"]["id"], self.flight.id)
+		self.assertEqual(data["flight"]["flight_number"], self.flight.flight_number)
+		self.assertEqual(data["flight"]["airline"], self.flight.airline)
+		self.assertEqual(data["tourist"]["id"], tourist.id)
+		self.assertEqual(data["tourist"]["first_name"], tourist.first_name)
+		self.assertEqual(data["tourist"]["last_name"], tourist.last_name)
+
+
+class FlightTicketAdminApiTests(APITestCase):
+	def setUp(self):
+		self.currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
+		self.agency = Agency.objects.create(
+			name="Demo Agency",
+			agency_type="B2B",
+			contact_person="John Manager",
+		)
+		self.flight = Flight.objects.create(
+			flight_number="JV200",
+			airline="Jovira Air",
+			origin="Istanbul",
+			destination="Antalya",
+			departure_time=timezone.now(),
+			arrival_time=timezone.now() + timezone.timedelta(hours=1),
+		)
+		self.reservation = Reservation.objects.create(
+			reservation_number="RSV-2001",
+			currency=self.currency,
+			agency=self.agency,
+		)
+		self.tourist = Tourist.objects.create(
+			reservation=self.reservation,
+			first_name="Sara",
+			last_name="Demir",
+			sex=Tourist.SexChoices.FEMALE,
+			age_type=Tourist.AgeTypeChoices.ADULT,
+		)
+		self.ticket = FlightTicket.objects.create(
+			reservation=self.reservation,
+			flight=self.flight,
+			tourist=self.tourist,
+			ticket_number="TK-2001",
+			pnr_code="ZXCV12",
+		)
+		self.user = CustomUser.objects.create_user(
+			email="reservation@example.com",
+			password="pass1234",
+			username="reservation.user",
+			role=CustomUser.RoleChoices.RESERVATION,
+		)
+		self.client.force_authenticate(user=self.user)
+
+	def test_admin_flight_ticket_delete_is_allowed(self):
+		response = self.client.delete(reverse("admin-flight-tickets-detail", args=[self.ticket.id]))
+
+		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+		self.assertFalse(FlightTicket.objects.filter(id=self.ticket.id).exists())

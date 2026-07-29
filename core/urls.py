@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/v1/reservations/', include('reservations.urls')),
     path('api/v1/finance/', include('finance.urls')),
     path('api/v1/public-site/', include('publicsite.urls')),
+    path('api/v1/settings/', include('settings.urls')),
     path('api/v1/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/v1/auth/register/', RegisterView.as_view(), name='auth_register'),
