@@ -9,7 +9,8 @@ class HeroSection(models.Model):
     headline = models.CharField(
         _("Headline"),
         max_length=255,
-        default="Find Premium Hotels and Curated Tour Experiences in Minutes",
+        blank=True,
+        default="",
     )
     description = models.TextField(
         _("Description"),

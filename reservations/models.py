@@ -126,11 +126,17 @@ class Tourist(models.Model):
     class SexChoices(models.TextChoices):
         MALE = "MALE", _("Male")
         FEMALE = "FEMALE", _("Female")
+        UNKNOWN = "UNKNOWN", _("Unknown")
 
     class AgeTypeChoices(models.TextChoices):
         ADULT = "ADULT", _("Adult")
         CHILD = "CHILD", _("Child")
         INFANT = "INFANT", _("Infant")
+
+    class PassportTypeChoices(models.TextChoices):
+        PASSPORT = "PASSPORT", _("Passport")
+        ID_CARD = "ID_CARD", _("ID Card")
+        OTHER = "OTHER", _("Other")
 
     reservation = models.ForeignKey(
         Reservation,
@@ -142,11 +148,38 @@ class Tourist(models.Model):
     last_name = models.CharField(_("Last Name"), max_length=150)
     sex = models.CharField(_("Sex"), max_length=10, choices=SexChoices.choices)
     age_type = models.CharField(_("Age Type"), max_length=10, choices=AgeTypeChoices.choices)
+    passport_type = models.CharField(
+        _("Passport Type"),
+        max_length=50,
+        choices=PassportTypeChoices.choices,
+        blank=True,
+        null=True,
+        help_text=_("Type of identity document presented, if available."),
+    )
     passport_number = models.CharField(
         _("Passport Number"),
         max_length=50,
         blank=True,
         help_text=_("Passport number of the tourist, if available."),
+    )
+    passport_issue_date = models.DateField(
+        _("Passport Issue Date"),
+        null=True,
+        blank=True,
+        help_text=_("Passport issue date of the tourist, if available."),
+    )
+    passport_expiry_date = models.DateField(
+        _("Passport Expiry Date"),
+        null=True,
+        blank=True,
+        help_text=_("Passport expiry date of the tourist, if available."),
+    )
+    issue_city = models.CharField(
+        _("Issue City"),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_("City where the passport was issued, if available."),
     )
     nationality = models.CharField(
         _("Nationality"),
@@ -160,11 +193,111 @@ class Tourist(models.Model):
         blank=True,
         help_text=_("Date of birth of the tourist, if available."),
     )
-    passport_expiry_date = models.DateField(
-        _("Passport Expiry Date"),
+    phone = models.CharField(
+        _("Phone"),
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text=_("Contact phone number of the tourist, if available."),
+    )
+    email = models.EmailField(
+        _("Email"),
+        blank=True,
+        null=True,
+        help_text=_("Contact email of the tourist, if available."),
+    )
+    iin = models.CharField(
+        _("IIN"),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_("National ID / tax number of the tourist, if available."),
+    )
+
+    # Outbound (arrival) flight
+    arrival_terminal = models.CharField(
+        _("Arrival Terminal"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    arrival_city_name = models.CharField(
+        _("Arrival City Name"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    arrival_date = models.DateTimeField(
+        _("Arrival Date"),
         null=True,
         blank=True,
-        help_text=_("Passport expiry date of the tourist, if available."),
+    )
+    arrival_flight_number = models.CharField(
+        _("Arrival Flight Number"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+
+    # Inbound (departure) flight
+    departure_terminal = models.CharField(
+        _("Departure Terminal"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    departure_city_name = models.CharField(
+        _("Departure City Name"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    departure_date = models.DateTimeField(
+        _("Departure Date"),
+        null=True,
+        blank=True,
+    )
+    departure_flight_number = models.CharField(
+        _("Departure Flight Number"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+
+    # Insurance
+    insurance = models.CharField(
+        _("Insurance"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    policy_number = models.CharField(
+        _("Policy Number"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    policy_start_date = models.DateField(
+        _("Policy Start Date"),
+        null=True,
+        blank=True,
+    )
+    policy_end_date = models.DateField(
+        _("Policy End Date"),
+        null=True,
+        blank=True,
+    )
+
+    tourcode_confirmation_number = models.CharField(
+        _("TourCode Confirmation Number"),
+        max_length=255,
+        blank=True,
+        null=True,
+    )
+    note = models.TextField(
+        _("Note"),
+        blank=True,
+        null=True,
     )
 
     class Meta:

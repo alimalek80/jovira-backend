@@ -222,6 +222,20 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
     queryset = Reservation.objects.all().order_by("-created_at")
     serializer_class = ReservationSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+
+        return queryset
+
     def get_permissions(self):
         if self.action == "create":
             permission_classes = (IsReservationOperationsRole,)
