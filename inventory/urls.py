@@ -7,6 +7,7 @@ from .views import (
     AdminHotelImageViewSet,
     AdminHotelRoomViewSet,
     AdminHotelViewSet,
+    AdminTourPackageImageViewSet,
     AdminTourPackageViewSet,
     AdminTransferProviderViewSet,
     AdminTransferViewSet,
@@ -24,6 +25,7 @@ admin_router.register(r"hotel-rooms", AdminHotelRoomViewSet, basename="admin-hot
 admin_router.register(r"hotel-images", AdminHotelImageViewSet, basename="admin-hotel-images")
 admin_router.register(r"flights", AdminFlightViewSet, basename="admin-flights")
 admin_router.register(r"tour-packages", AdminTourPackageViewSet, basename="admin-tour-packages")
+admin_router.register(r"tour-package-images", AdminTourPackageImageViewSet, basename="admin-tour-package-images")
 admin_router.register(r"excursions", AdminExcursionViewSet, basename="admin-excursions")
 admin_router.register(r"transfer-providers", AdminTransferProviderViewSet, basename="admin-transfer-providers")
 admin_router.register(r"transfers", AdminTransferViewSet, basename="admin-transfers")

@@ -2,7 +2,7 @@ from rest_framework import serializers
 from decimal import Decimal
 from finance.utils import convert_amount
 
-from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
+from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, TourPackageGalleryImage, HotelFeature, HotelImage, Transfer, TransferProvider
 
 
 
@@ -180,8 +180,16 @@ class ClientFlightSerializer(serializers.ModelSerializer):
         return obj.get_price_for_user(user)
 
 
+class TourPackageGalleryImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TourPackageGalleryImage
+        fields = ("id", "tour_package", "image", "alt_text", "order")
+        read_only_fields = ("id",)
+
+
 class TourPackageSerializer(serializers.ModelSerializer):
     minimum_cost_floor = serializers.SerializerMethodField(read_only=True)
+    gallery_images = TourPackageGalleryImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = TourPackage
@@ -197,6 +205,7 @@ class TourPackageSerializer(serializers.ModelSerializer):
             "destination_ru",
             "days",
             "nights",
+            "main_image",
             "currency",
             "public_price",
             "agency_price",
@@ -206,6 +215,7 @@ class TourPackageSerializer(serializers.ModelSerializer):
             "transfers",
             "excursions",
             "minimum_cost_floor",
+            "gallery_images",
         )
         read_only_fields = ("id",)
 
@@ -264,6 +274,7 @@ class TourPackageSerializer(serializers.ModelSerializer):
 
 class ClientTourPackageSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
+    gallery_images = TourPackageGalleryImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = TourPackage
@@ -279,8 +290,10 @@ class ClientTourPackageSerializer(serializers.ModelSerializer):
             "destination_ru",
             "days",
             "nights",
+            "main_image",
             "currency",
             "price",
+            "gallery_images",
         )
         read_only_fields = ("id",)
 

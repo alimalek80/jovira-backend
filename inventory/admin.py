@@ -4,7 +4,7 @@ from modeltranslation.admin import TranslationAdmin
 from decimal import Decimal
 from finance.utils import convert_amount
 
-from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, HotelFeature, HotelImage, Transfer, TransferProvider
+from .models import Excursion, Flight, Hotel, HotelRoom, TourPackage, TourPackageGalleryImage, HotelFeature, HotelImage, Transfer, TransferProvider
 
 
 
@@ -53,6 +53,11 @@ class FlightAdmin(TranslationAdmin):
 	list_display = ('flight_number', 'airline', 'origin', 'destination', 'departure_time', 'arrival_time', 'currency', 'price', 'agency_price', 'cost_price')
 	search_fields = ('flight_number', 'airline', 'origin', 'destination')
 	list_filter = ('airline', 'origin', 'destination', 'currency')
+
+
+class TourPackageGalleryImageInline(admin.TabularInline):
+	model = TourPackageGalleryImage
+	extra = 1
 
 
 class TourPackageAdminForm(forms.ModelForm):
@@ -121,10 +126,11 @@ class TourPackageAdmin(TranslationAdmin):
 	search_fields = ('name', 'destination')
 	list_filter = ('destination',)
 	filter_horizontal = ('flights', 'hotels', 'transfers', 'excursions')
+	inlines = [TourPackageGalleryImageInline]
 	fieldsets = (
 		(
 			'Package Basics',
-			{'fields': ('name', 'destination', 'days', 'nights', 'currency')}
+			{'fields': ('name', 'destination', 'days', 'nights', 'main_image', 'currency')}
 		),
 		(
 			'Optional Components',
@@ -141,6 +147,12 @@ class TourPackageAdmin(TranslationAdmin):
 			}
 		),
 	)
+
+
+@admin.register(TourPackageGalleryImage)
+class TourPackageGalleryImageAdmin(admin.ModelAdmin):
+	list_display = ('tour_package', 'image', 'alt_text', 'order')
+	search_fields = ('tour_package__name', 'alt_text')
 
 
 @admin.register(Excursion)

@@ -14,6 +14,7 @@ from .models import (
     HotelImage,
     HotelRoom,
     TourPackage,
+    TourPackageGalleryImage,
     Transfer,
     TransferProvider,
 )
@@ -29,6 +30,7 @@ from .serializers import (
     HotelImageSerializer,
     HotelRoomSerializer,
     HotelSerializer,
+    TourPackageGalleryImageSerializer,
     TourPackageSerializer,
     TransferProviderSerializer,
     TransferSerializer,
@@ -239,6 +241,22 @@ class AdminTourPackageViewSet(viewsets.ModelViewSet):
             context={"request": request},
         )
         return Response(serializer.data)
+
+
+class AdminTourPackageImageViewSet(viewsets.ModelViewSet):
+    queryset = TourPackageGalleryImage.objects.all().order_by("tour_package", "order", "id")
+    serializer_class = TourPackageGalleryImageSerializer
+    permission_classes = (IsInventoryRole,)
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        tour_package_id = self.request.query_params.get("tour_package")
+
+        if tour_package_id:
+            qs = qs.filter(tour_package_id=tour_package_id)
+
+        return qs
 
 
 class ClientTourPackageViewSet(viewsets.ReadOnlyModelViewSet):

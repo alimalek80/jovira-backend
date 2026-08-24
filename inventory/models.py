@@ -222,6 +222,7 @@ class TourPackage(models.Model):
     destination = models.CharField(_("Destination"), max_length=120)
     days = models.IntegerField(_("Days"))
     nights = models.IntegerField(_("Nights"))
+    main_image = models.ImageField(_("Main Image"), upload_to="tour_packages/main/", blank=True, null=True)
     currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -333,6 +334,26 @@ class TourPackage(models.Model):
         if user and user.is_authenticated and getattr(user, "can_access_agency_prices", False):
             return self.agency_price
         return self.public_price
+
+
+class TourPackageGalleryImage(models.Model):
+    tour_package = models.ForeignKey(
+        TourPackage,
+        on_delete=models.CASCADE,
+        related_name="gallery_images",
+        verbose_name=_("Tour Package"),
+    )
+    image = models.ImageField(_("Gallery Image"), upload_to="tour_packages/gallery/")
+    alt_text = models.CharField(_("Alt Text"), max_length=255, blank=True)
+    order = models.PositiveIntegerField(_("Order"), default=0)
+
+    class Meta:
+        verbose_name = _("Tour Package Gallery Image")
+        verbose_name_plural = _("Tour Package Gallery Images")
+        ordering = ("order", "id")
+
+    def __str__(self):
+        return f"{self.tour_package.name} - {self.alt_text or self.image.url}"
 
 
 class Excursion(models.Model):
