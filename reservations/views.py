@@ -451,6 +451,15 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
             if cost_cur and service.cost:
                 cost[cost_cur] += to_decimal(service.cost)
 
+        # Excursion services
+        for service in reservation.excursion_services.select_related("selling_currency", "cost_currency").all():
+            sel_cur = get_currency_code(service.selling_currency)
+            cost_cur = get_currency_code(service.cost_currency)
+            if sel_cur and service.price:
+                selling[sel_cur] += to_decimal(service.price)
+            if cost_cur and service.cost:
+                cost[cost_cur] += to_decimal(service.cost)
+
         # Build per-currency breakdown with margin
         all_currencies = set(selling.keys()) | set(cost.keys())
         breakdown = []
@@ -1107,12 +1116,20 @@ class ClientTransferServiceViewSet(viewsets.ModelViewSet):
 
 class AdminExcursionServiceViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
     queryset = ExcursionService.objects.select_related(
+        "reservation",
         "excursion",
         "selling_currency",
         "cost_currency",
     ).order_by("-excursion_date")
     serializer_class = ExcursionServiceSerializer
     permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        reservation_id = self.request.query_params.get("reservation")
+        if reservation_id:
+            queryset = queryset.filter(reservation_id=reservation_id)
+        return queryset
 
 
 class ClientExcursionServiceViewSet(viewsets.ModelViewSet):

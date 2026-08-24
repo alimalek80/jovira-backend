@@ -650,8 +650,16 @@ class TransferService(models.Model):
 
 
 class ExcursionService(models.Model):
-    """Standalone excursion booking with full financial tracking."""
+    """Excursion booking with full financial tracking — standalone (B2B) when reservation is null, reservation-linked otherwise."""
 
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.CASCADE,
+        related_name="excursion_services",
+        verbose_name=_("Reservation"),
+        null=True,
+        blank=True,
+    )
     system_date = models.DateTimeField(_("System Date"), auto_now_add=True)
     excursion_date = models.DateField(_("Excursion Date"))
     excursion = models.ForeignKey(

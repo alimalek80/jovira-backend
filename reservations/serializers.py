@@ -468,6 +468,7 @@ class ExcursionServiceSerializer(serializers.ModelSerializer):
         model = ExcursionService
         fields = (
             "id",
+            "reservation",
             "system_date",
             "excursion_date",
             "excursion",
