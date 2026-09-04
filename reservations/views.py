@@ -11,6 +11,7 @@ from accounts.permissions import (
     IsReservationWorkflowRole,
     ReadOnlyOrReservationOperationsRole,
 )
+from rest_framework.permissions import IsAuthenticated
 from inventory.models import HotelRoom
 
 from .models import (
@@ -20,6 +21,7 @@ from .models import (
     HotelBooking,
     Reservation,
     ReservationActivityLog,
+    ReservationTicket,
     Tourist,
     TransferService,
     OtherService,
@@ -31,6 +33,7 @@ from .serializers import (
     OtherServiceSerializer,
     HotelBookingSerializer,
     ReservationSerializer,
+    ReservationTicketSerializer,
     TouristSerializer,
     TransferServiceSerializer,
     ReservationActivityLogSerializer,
@@ -1149,3 +1152,18 @@ class ClientExcursionServiceViewSet(viewsets.ModelViewSet):
             return qs
 
         return qs.none()
+
+
+class AdminReservationTicketViewSet(viewsets.ModelViewSet):
+    serializer_class = ReservationTicketSerializer
+    permission_classes = [IsAuthenticated, IsReservationWorkflowRole]
+
+    def get_queryset(self):
+        reservation_id = self.request.query_params.get("reservation")
+        qs = ReservationTicket.objects.select_related("created_by", "reservation")
+        if reservation_id:
+            qs = qs.filter(reservation_id=reservation_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

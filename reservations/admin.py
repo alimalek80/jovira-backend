@@ -6,6 +6,7 @@ from .models import (
     HotelBooking,
     Reservation,
     ReservationActivityLog,
+    ReservationTicket,
     Tourist,
     TransferService,
 )
@@ -144,3 +145,10 @@ class ReservationActivityLogAdmin(admin.ModelAdmin):
         "metadata",
         "created_at",
     )
+
+
+@admin.register(ReservationTicket)
+class ReservationTicketAdmin(admin.ModelAdmin):
+    list_display = ("ticket_id", "source", "reservation", "created_by", "created_at")
+    list_filter = ("source",)
+    search_fields = ("ticket_id", "reservation__reservation_number")

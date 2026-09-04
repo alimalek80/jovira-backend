@@ -7,6 +7,7 @@ from .views import (
     AdminFlightTicketViewSet,
     AdminHotelBookingViewSet,
     AdminOtherServiceViewSet,
+    AdminReservationTicketViewSet,
     AdminReservationViewSet,
     AdminTransferServiceViewSet,
     AdminTouristViewSet,
@@ -33,6 +34,11 @@ admin_router.register(
     r"reservation-activity-logs",
     AdminReservationActivityLogViewSet,
     basename="admin-reservation-activity-logs",
+)
+admin_router.register(
+    r"reservation-tickets",
+    AdminReservationTicketViewSet,
+    basename="admin-reservation-tickets",
 )
 
 client_router = DefaultRouter()

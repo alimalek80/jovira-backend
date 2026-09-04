@@ -714,3 +714,39 @@ class ExcursionService(models.Model):
 
     def __str__(self):
         return f"{self.excursion.name} - {self.excursion_date}"
+
+
+class ReservationTicket(models.Model):
+    class SourceChoices(models.TextChoices):
+        EMAIL = "EMAIL", "Email"
+        WHATSAPP = "WHATSAPP", "WhatsApp"
+        OTHER = "OTHER", "Other"
+
+    reservation = models.ForeignKey(
+        "Reservation",
+        on_delete=models.CASCADE,
+        related_name="tickets",
+    )
+    ticket_id = models.CharField(max_length=500)
+    source = models.CharField(
+        max_length=20,
+        choices=SourceChoices.choices,
+        default=SourceChoices.EMAIL,
+    )
+    note = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        "accounts.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_tickets",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Reservation Ticket"
+        verbose_name_plural = "Reservation Tickets"
+
+    def __str__(self):
+        return f"{self.ticket_id} ({self.reservation_id})"
