@@ -578,6 +578,16 @@ class AdminReservationViewSet(PreventHardDeleteMixin, viewsets.ModelViewSet):
                     {"detail": "This reservation is already with Finance."},
                     status=400,
                 )
+            if not reservation.tickets.exists():
+                return Response(
+                    {
+                        "detail": (
+                            "Cannot send to finance: no ticket ID is attached to "
+                            "this reservation. Add a ticket via Workdesk → Add Tickets first."
+                        )
+                    },
+                    status=400,
+                )
             reservation.is_locked_by_finance = True
             reservation.save(update_fields=["is_locked_by_finance"])
             message = "Reservation was sent to Finance (Ping)."
