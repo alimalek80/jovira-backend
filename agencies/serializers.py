@@ -2,7 +2,25 @@ from rest_framework import serializers
 from django.db import transaction
 
 from accounts.models import CustomUser
-from .models import Agency
+from .models import Agency, Supplier
+
+
+class SupplierSerializer(serializers.ModelSerializer):
+    default_currency_code = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Supplier
+        fields = [
+            "id", "name", "supplier_type", "email", "phone", "address",
+            "tax_number", "default_currency", "default_currency_code",
+            "bank_details", "note", "is_active", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "created_at", "updated_at", "default_currency_code",
+        ]
+
+    def get_default_currency_code(self, obj):
+        return obj.default_currency.code if obj.default_currency else ""
 
 
 class AdminAgencySerializer(serializers.ModelSerializer):

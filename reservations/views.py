@@ -1,8 +1,11 @@
+from decimal import Decimal
+
+from django.db import transaction
 from django.db.models import F, Q
 
-from rest_framework import permissions, viewsets
+from rest_framework import permissions, serializers, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import MethodNotAllowed, PermissionDenied
+from rest_framework.exceptions import MethodNotAllowed, NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from accounts.permissions import (
@@ -13,6 +16,7 @@ from accounts.permissions import (
 )
 from rest_framework.permissions import IsAuthenticated
 from inventory.models import HotelRoom
+from agencies.models import Supplier
 
 from .models import (
     ExcursionBooking,
@@ -22,6 +26,7 @@ from .models import (
     Reservation,
     ReservationActivityLog,
     ReservationTicket,
+    ServicePriceHistory,
     Tourist,
     TransferService,
     OtherService,
@@ -34,6 +39,7 @@ from .serializers import (
     HotelBookingSerializer,
     ReservationSerializer,
     ReservationTicketSerializer,
+    ServicePriceHistorySerializer,
     TouristSerializer,
     TransferServiceSerializer,
     ReservationActivityLogSerializer,
@@ -46,6 +52,65 @@ class PreventHardDeleteMixin:
             "DELETE",
             detail="Hard deletion is disabled. Please use the cancellation workflow instead.",
         )
+
+
+SERVICE_TYPE_MODEL_MAP = {
+    "HOTEL": HotelBooking,
+    "TRANSFER": TransferService,
+    "FLIGHT": FlightTicket,
+    "OTHER": OtherService,
+    "EXCURSION": ExcursionService,
+}
+
+SERVICE_TYPE_SELLING_CURRENCY_FIELD = {
+    "HOTEL": "selling_currency",
+    "TRANSFER": "currency",
+    "FLIGHT": "currency",
+    "OTHER": "selling_currency",
+    "EXCURSION": "selling_currency",
+}
+
+
+def _resolve_service(service_type, service_id):
+    """Return the service instance, or None if not found/invalid type."""
+    if not isinstance(service_type, str):
+        return None
+    model = SERVICE_TYPE_MODEL_MAP.get(service_type)
+    if model is None:
+        return None
+    try:
+        service_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807).run_validation(service_id)
+    except ValidationError:
+        return None
+    return model.objects.filter(pk=service_id).first()
+
+
+def _service_currency_code(service, service_type, kind):
+    """kind is 'price' or 'cost'. Return the ISO code or ''."""
+    if kind == "price":
+        field = SERVICE_TYPE_SELLING_CURRENCY_FIELD[service_type]
+    else:
+        field = "cost_currency"
+    currency = getattr(service, field, None)
+    return getattr(currency, "code", "") or ""
+
+
+def _correction_reason(data):
+    reason = data.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValidationError({"reason": "A non-empty reason is required."})
+    return reason.strip()
+
+
+def _correction_payload(service, service_type, history):
+    data = {"service_type": service_type, "service_id": service.pk}
+    for field in (
+        "price", "price_correction", "total_price", "cost",
+        "cost_correction", "total_cost", "profit",
+    ):
+        data[field] = str(getattr(service, field))
+    data["history"] = ServicePriceHistorySerializer(history, many=True).data
+    return data
 
 
 def _adjust_availability(hotel_room_id, delta):
@@ -1167,3 +1232,190 @@ class AdminReservationTicketViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+class AdminServiceCorrectionViewSet(viewsets.ViewSet):
+    # Finance edits use the same reservation-level policy as AdminReservationViewSet.
+    permission_classes = (
+        IsReservationWorkflowRole,
+        IsReservationEditorOrReadOnlyIfLocked,
+    )
+
+    def _get_locked_service(self, service_type, service_id, require_reservation=True):
+        service = _resolve_service(service_type, service_id)
+        if service is None:
+            raise NotFound("Service not found.")
+        service = type(service).objects.select_for_update().filter(pk=service.pk).first()
+        if service is None:
+            raise NotFound("Service not found.")
+        if service.reservation_id is None:
+            if require_reservation:
+                raise ValidationError(
+                    "Corrections are only supported for services attached to a reservation."
+                )
+            if not ReadOnlyOrReservationOperationsRole().has_permission(self.request, self):
+                raise PermissionDenied("This role cannot edit standalone services.")
+        else:
+            reservation = Reservation.objects.select_for_update().get(pk=service.reservation_id)
+            self.check_object_permissions(self.request, reservation)
+            service.reservation = reservation
+        return service
+
+    @action(detail=False, methods=["post"], url_path="apply")
+    def apply(self, request):
+        reason = _correction_reason(request.data)
+        fields = [field for field in ("price_correction", "cost_correction") if field in request.data]
+        if not fields:
+            raise ValidationError("Provide price_correction or cost_correction.")
+        service_type = request.data.get("service_type")
+        with transaction.atomic():
+            service = self._get_locked_service(service_type, request.data.get("service_id"))
+            values = {}
+            for field in fields:
+                model_field = service._meta.get_field(field)
+                try:
+                    values[field] = serializers.DecimalField(
+                        max_digits=model_field.max_digits,
+                        decimal_places=model_field.decimal_places,
+                    ).run_validation(request.data[field])
+                except ValidationError as exc:
+                    raise ValidationError({field: exc.detail})
+            history = []
+            changes = []
+            for field, new_value in values.items():
+                old_value = getattr(service, field) or Decimal("0.00")
+                if new_value == old_value:
+                    continue
+                setattr(service, field, new_value)
+                history.append(ServicePriceHistory.objects.create(
+                    reservation=service.reservation,
+                    service_type=service_type,
+                    service_id=service.pk,
+                    field_name=field.upper(),
+                    old_value=old_value,
+                    new_value=new_value,
+                    currency_code=_service_currency_code(service, service_type, field.split("_")[0]),
+                    reason=reason,
+                    changed_by=request.user,
+                ))
+                changes.append({"field": field, "old": str(old_value), "new": str(new_value)})
+            if changes:
+                service.save(update_fields=[change["field"] for change in changes])
+                _create_reservation_activity_log(
+                    request, service.reservation, ReservationActivityLog.ActionChoices.UPDATED,
+                    "Service correction was applied.",
+                    {"service_type": service_type, "service_id": service.pk, "changes": changes},
+                )
+            return Response(_correction_payload(service, service_type, history))
+
+    @action(detail=False, methods=["post"], url_path="undo")
+    def undo(self, request):
+        reason = _correction_reason(request.data)
+        try:
+            history_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807).run_validation(
+                request.data.get("history_id")
+            )
+        except ValidationError:
+            raise NotFound("Price history entry not found.")
+        with transaction.atomic():
+            entry = ServicePriceHistory.objects.filter(pk=history_id).first()
+            if entry is None:
+                raise NotFound("Price history entry not found.")
+            service = self._get_locked_service(entry.service_type, entry.service_id)
+            entry = ServicePriceHistory.objects.select_for_update().get(pk=entry.pk)
+            if entry.is_reverted:
+                raise ValidationError("Already reverted.")
+            if entry.field_name not in ("PRICE_CORRECTION", "COST_CORRECTION"):
+                raise ValidationError("Base price/cost changes are not undoable yet.")
+            if entry.reservation_id != service.reservation_id:
+                return Response({"detail": "The service is now attached to a different reservation."}, status=409)
+            field = entry.field_name.lower()
+            current = getattr(service, field) or Decimal("0.00")
+            if current != entry.new_value:
+                return Response(
+                    {"detail": f"The value has changed since this entry. Current value: {current}."},
+                    status=409,
+                )
+            setattr(service, field, entry.old_value)
+            entry.is_reverted = True
+            entry.save(update_fields=["is_reverted"])
+            reversal = ServicePriceHistory.objects.create(
+                reservation=entry.reservation,
+                service_type=entry.service_type,
+                service_id=entry.service_id,
+                field_name=entry.field_name,
+                old_value=entry.new_value,
+                new_value=entry.old_value,
+                currency_code=entry.currency_code,
+                reason=reason,
+                reverted_from=entry,
+                changed_by=request.user,
+            )
+            service.save(update_fields=[field])
+            _create_reservation_activity_log(
+                request, service.reservation, ReservationActivityLog.ActionChoices.UPDATED,
+                "Service correction was undone.",
+                {
+                    "service_type": entry.service_type, "service_id": service.pk,
+                    "history_id": entry.pk,
+                    "changes": [{"field": field, "old": str(current), "new": str(entry.old_value)}],
+                },
+            )
+            return Response(_correction_payload(service, entry.service_type, [reversal]))
+
+    @action(detail=False, methods=["post"], url_path="set-supplier")
+    def set_supplier(self, request):
+        if "supplier_id" not in request.data:
+            raise ValidationError({"supplier_id": "Provide a supplier ID or null to clear it."})
+        service_type = request.data.get("service_type")
+        with transaction.atomic():
+            service = self._get_locked_service(
+                service_type, request.data.get("service_id"), require_reservation=False,
+            )
+            supplier = None
+            if request.data["supplier_id"] is not None:
+                try:
+                    supplier_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807).run_validation(
+                        request.data["supplier_id"]
+                    )
+                except ValidationError:
+                    raise ValidationError({"supplier_id": "An active supplier must be selected."})
+                supplier = Supplier.objects.select_for_update().filter(pk=supplier_id, is_active=True).first()
+                if supplier is None:
+                    raise ValidationError({"supplier_id": "An active supplier must be selected."})
+            old_supplier = service.supplier
+            service.supplier = supplier
+            service.save(update_fields=["supplier"])
+            _create_reservation_activity_log(
+                request, service.reservation, ReservationActivityLog.ActionChoices.UPDATED,
+                "Service supplier was changed.",
+                {
+                    "service_type": service_type, "service_id": service.pk,
+                    "old_supplier_id": old_supplier.pk if old_supplier else None,
+                    "old_supplier_name": old_supplier.name if old_supplier else "",
+                    "new_supplier_id": supplier.pk if supplier else None,
+                    "new_supplier_name": supplier.name if supplier else "",
+                },
+            )
+            return Response({
+                "service_type": service_type, "service_id": service.pk,
+                "supplier": {"id": supplier.pk, "name": supplier.name} if supplier else None,
+            })
+
+
+class AdminServicePriceHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ServicePriceHistorySerializer
+    permission_classes = (ReadOnlyOrReservationOperationsRole,)
+
+    def get_queryset(self):
+        qs = ServicePriceHistory.objects.select_related("changed_by", "reservation")
+        for field in ("reservation", "service_type", "service_id"):
+            value = self.request.query_params.get(field)
+            if value:
+                if field != "service_type":
+                    try:
+                        value = serializers.IntegerField(min_value=1, max_value=9223372036854775807).run_validation(value)
+                    except ValidationError as exc:
+                        raise ValidationError({field: exc.detail})
+                qs = qs.filter(**{field: value})
+        return qs

@@ -7,12 +7,31 @@ from rest_framework.response import Response
 from accounts.models import CustomUser
 from accounts.permissions import IsAdminRole
 
-from .models import Agency
+from .models import Agency, Supplier
 from .serializers import (
     AdminAgencySerializer,
     AgencyRegisterSerializer,
     ClientAgencySerializer,
+    SupplierSerializer,
 )
+
+
+class AdminSupplierViewSet(viewsets.ModelViewSet):
+    serializer_class = SupplierSerializer
+    permission_classes = (IsAdminRole,)
+
+    def get_queryset(self):
+        qs = Supplier.objects.select_related("default_currency")
+        supplier_type = self.request.query_params.get("supplier_type")
+        if supplier_type:
+            qs = qs.filter(supplier_type=supplier_type)
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == "true")
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(name__icontains=search)
+        return qs
 
 
 class AdminAgencyViewSet(viewsets.ModelViewSet):

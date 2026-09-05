@@ -8,6 +8,7 @@ from .models import (
     Reservation,
     ReservationActivityLog,
     ReservationTicket,
+    ServicePriceHistory,
     Tourist,
     TransferService,
     OtherService,
@@ -68,7 +69,27 @@ class TouristSerializer(serializers.ModelSerializer):
         }
 
 
-class HotelBookingSerializer(serializers.ModelSerializer):
+class ServiceFinancialUpdateMixin:
+    def to_internal_value(self, data):
+        attrs = super().to_internal_value(data)
+        errors = {}
+        for field in ("price", "cost", "price_correction", "cost_correction"):
+            if field not in attrs:
+                continue
+            if self.instance is not None:
+                if attrs[field] != getattr(self.instance, field):
+                    errors[field] = "Use the service-corrections endpoint with a reason to adjust service amounts."
+                else:
+                    # Do not write stale amounts back during unrelated updates.
+                    attrs.pop(field)
+            elif field.endswith("_correction") and attrs[field] != 0:
+                errors[field] = "Create the service first, then apply corrections with a reason."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class HotelBookingSerializer(ServiceFinancialUpdateMixin, serializers.ModelSerializer):
     class Meta:
         model = HotelBooking
         fields = (
@@ -92,8 +113,10 @@ class HotelBookingSerializer(serializers.ModelSerializer):
             "remarks_for_hotel",
             "is_paid",
             "tourists",
+            "price_correction", "cost_correction",
+            "total_price", "total_cost", "profit", "supplier",
         )
-        read_only_fields = ("id",)
+        read_only_fields = ("id", "total_price", "total_cost", "profit")
 
     def validate(self, attrs):
         reservation = attrs.get("reservation", getattr(self.instance, "reservation", None))
@@ -169,7 +192,7 @@ class HotelBookingSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class FlightTicketSerializer(serializers.ModelSerializer):
+class FlightTicketSerializer(ServiceFinancialUpdateMixin, serializers.ModelSerializer):
     class Meta:
         model = FlightTicket
         fields = (
@@ -187,8 +210,10 @@ class FlightTicketSerializer(serializers.ModelSerializer):
             "cost",
             "cost_currency",
             "cross_currency_rate",
+            "price_correction", "cost_correction",
+            "total_price", "total_cost", "profit", "supplier",
         )
-        read_only_fields = ("id",)
+        read_only_fields = ("id", "total_price", "total_cost", "profit")
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -204,7 +229,7 @@ class ExcursionBookingSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)
 
 
-class TransferServiceSerializer(serializers.ModelSerializer):
+class TransferServiceSerializer(ServiceFinancialUpdateMixin, serializers.ModelSerializer):
     class Meta:
         model = TransferService
         fields = (
@@ -229,8 +254,10 @@ class TransferServiceSerializer(serializers.ModelSerializer):
             "passengers",
             "external_note",
             "driver_note",
+            "price_correction", "cost_correction",
+            "total_price", "total_cost", "profit", "supplier",
         )
-        read_only_fields = ("id",)
+        read_only_fields = ("id", "total_price", "total_cost", "profit")
 
     def validate(self, attrs):
         reservation = attrs.get("reservation", getattr(self.instance, "reservation", None))
@@ -445,7 +472,7 @@ class ReservationSerializer(serializers.ModelSerializer):
 
         return instance
 
-class OtherServiceSerializer(serializers.ModelSerializer):
+class OtherServiceSerializer(ServiceFinancialUpdateMixin, serializers.ModelSerializer):
     class Meta:
         model = OtherService
         fields = (
@@ -461,10 +488,12 @@ class OtherServiceSerializer(serializers.ModelSerializer):
             "cost",
             "is_paid",
             "note",
+            "price_correction", "cost_correction",
+            "total_price", "total_cost", "profit", "supplier",
         )
-        read_only_fields = ("id", "system_date")
+        read_only_fields = ("id", "system_date", "total_price", "total_cost", "profit")
 
-class ExcursionServiceSerializer(serializers.ModelSerializer):
+class ExcursionServiceSerializer(ServiceFinancialUpdateMixin, serializers.ModelSerializer):
     class Meta:
         model = ExcursionService
         fields = (
@@ -484,8 +513,10 @@ class ExcursionServiceSerializer(serializers.ModelSerializer):
             "confirm_booking_number",
             "agent_confirmation_number",
             "note",
+            "price_correction", "cost_correction",
+            "total_price", "total_cost", "profit", "supplier",
         )
-        read_only_fields = ("id", "system_date")
+        read_only_fields = ("id", "system_date", "total_price", "total_cost", "profit")
 
     def _apply_excursion_defaults(self, validated_data):
         """
@@ -533,4 +564,25 @@ class ReservationTicketSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+        return ""
+
+
+class ServicePriceHistorySerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServicePriceHistory
+        fields = [
+            "id", "reservation", "service_type", "service_id", "field_name",
+            "old_value", "new_value", "currency_code", "reason",
+            "changed_by", "changed_by_name", "changed_at",
+            "is_reverted", "reverted_from",
+        ]
+        read_only_fields = [
+            "id", "changed_by", "changed_by_name", "changed_at",
+        ]
+
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip()
         return ""

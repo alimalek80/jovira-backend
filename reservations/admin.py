@@ -7,6 +7,7 @@ from .models import (
     Reservation,
     ReservationActivityLog,
     ReservationTicket,
+    ServicePriceHistory,
     Tourist,
     TransferService,
 )
@@ -152,3 +153,15 @@ class ReservationTicketAdmin(admin.ModelAdmin):
     list_display = ("ticket_id", "source", "reservation", "created_by", "created_at")
     list_filter = ("source",)
     search_fields = ("ticket_id", "reservation__reservation_number")
+
+
+@admin.register(ServicePriceHistory)
+class ServicePriceHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "service_type", "service_id", "field_name",
+        "old_value", "new_value", "currency_code",
+        "changed_by", "changed_at", "is_reverted",
+    )
+    list_filter = ("service_type", "field_name", "is_reverted")
+    search_fields = ("reservation__reservation_number", "reason")
+    readonly_fields = ("changed_at",)

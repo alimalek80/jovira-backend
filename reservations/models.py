@@ -372,11 +372,33 @@ class HotelBooking(models.Model):
     cost = models.DecimalField(
         _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
     )
+    price_correction = models.DecimalField(
+        _("Price Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to price. Total price = price + price correction."),
+    )
+    cost_correction = models.DecimalField(
+        _("Cost Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to cost. Total cost = cost + cost correction."),
+    )
     cross_currency_rate = models.DecimalField(
         _("Cross Currency Rate"),
         max_digits=15,
         decimal_places=10,
         default=Decimal("1.0000000000"),
+    )
+    supplier = models.ForeignKey(
+        "agencies.Supplier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hotel_bookings",
+        verbose_name=_("Supplier"),
     )
 
     # Tracking
@@ -395,6 +417,20 @@ class HotelBooking(models.Model):
     remarks_for_hotel = models.TextField(_("Remarks for Hotel"), blank=True)
 
     is_paid = models.BooleanField(_("Is Paid"), default=False)
+
+    @property
+    def total_price(self):
+        base = self.price or Decimal("0.00")
+        return base + (self.price_correction or Decimal("0.00"))
+
+    @property
+    def total_cost(self):
+        base = self.cost or Decimal("0.00")
+        return base + (self.cost_correction or Decimal("0.00"))
+
+    @property
+    def profit(self):
+        return self.total_price - self.total_cost
 
     class Meta:
         verbose_name = _("Hotel Booking")
@@ -455,6 +491,20 @@ class FlightTicket(models.Model):
     cost = models.DecimalField(
         _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
     )
+    price_correction = models.DecimalField(
+        _("Price Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to price. Total price = price + price correction."),
+    )
+    cost_correction = models.DecimalField(
+        _("Cost Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to cost. Total cost = cost + cost correction."),
+    )
     cost_currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -469,6 +519,28 @@ class FlightTicket(models.Model):
         decimal_places=10,
         default=Decimal("1.0000000000"),
     )
+    supplier = models.ForeignKey(
+        "agencies.Supplier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="flight_tickets",
+        verbose_name=_("Supplier"),
+    )
+
+    @property
+    def total_price(self):
+        base = self.price or Decimal("0.00")
+        return base + (self.price_correction or Decimal("0.00"))
+
+    @property
+    def total_cost(self):
+        base = self.cost or Decimal("0.00")
+        return base + (self.cost_correction or Decimal("0.00"))
+
+    @property
+    def profit(self):
+        return self.total_price - self.total_cost
 
     class Meta:
         verbose_name = _("Flight Ticket")
@@ -516,8 +588,44 @@ class OtherService(models.Model):
     cost = models.DecimalField(
         _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
     )
+    price_correction = models.DecimalField(
+        _("Price Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to price. Total price = price + price correction."),
+    )
+    cost_correction = models.DecimalField(
+        _("Cost Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to cost. Total cost = cost + cost correction."),
+    )
+    supplier = models.ForeignKey(
+        "agencies.Supplier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="other_services",
+        verbose_name=_("Supplier"),
+    )
     is_paid = models.BooleanField(_("Is Paid"), default=False)
     note = models.TextField(_("Note"), blank=True)
+
+    @property
+    def total_price(self):
+        base = self.price or Decimal("0.00")
+        return base + (self.price_correction or Decimal("0.00"))
+
+    @property
+    def total_cost(self):
+        base = self.cost or Decimal("0.00")
+        return base + (self.cost_correction or Decimal("0.00"))
+
+    @property
+    def profit(self):
+        return self.total_price - self.total_cost
 
     class Meta:
         verbose_name = _("Other Service")
@@ -606,6 +714,20 @@ class TransferService(models.Model):
     cost = models.DecimalField(
         _("Cost"), max_digits=12, decimal_places=2, null=True, blank=True
     )
+    price_correction = models.DecimalField(
+        _("Price Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to price. Total price = price + price correction."),
+    )
+    cost_correction = models.DecimalField(
+        _("Cost Correction"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to cost. Total cost = cost + cost correction."),
+    )
     cost_currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -620,6 +742,14 @@ class TransferService(models.Model):
         decimal_places=10,
         default=Decimal("1.0000000000"),
     )
+    supplier = models.ForeignKey(
+        "agencies.Supplier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transfer_services",
+        verbose_name=_("Supplier"),
+    )
     currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -633,6 +763,20 @@ class TransferService(models.Model):
     )
     external_note = models.TextField(_("External Note"), blank=True)
     driver_note = models.TextField(_("Driver Note"), blank=True)
+
+    @property
+    def total_price(self):
+        base = self.price or Decimal("0.00")
+        return base + (self.price_correction or Decimal("0.00"))
+
+    @property
+    def total_cost(self):
+        base = self.cost or Decimal("0.00")
+        return base + (self.cost_correction or Decimal("0.00"))
+
+    @property
+    def profit(self):
+        return self.total_price - self.total_cost
 
     class Meta:
         verbose_name = _("Transfer Service")
@@ -684,6 +828,20 @@ class ExcursionService(models.Model):
     cost = models.DecimalField(
         _("Cost"), max_digits=10, decimal_places=2, default=Decimal("0.00")
     )
+    price_correction = models.DecimalField(
+        _("Price Correction"),
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to price. Total price = price + price correction."),
+    )
+    cost_correction = models.DecimalField(
+        _("Cost Correction"),
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_("Adjustment applied to cost. Total cost = cost + cost correction."),
+    )
     cost_currency = models.ForeignKey(
         "finance.Currency",
         on_delete=models.PROTECT,
@@ -696,6 +854,14 @@ class ExcursionService(models.Model):
         decimal_places=10,
         default=Decimal("1.0000000000"),
     )
+    supplier = models.ForeignKey(
+        "agencies.Supplier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="excursion_services",
+        verbose_name=_("Supplier"),
+    )
     is_paid = models.BooleanField(_("Is Paid"), default=False)
 
     # Tracking
@@ -706,6 +872,20 @@ class ExcursionService(models.Model):
         _("Agent Confirmation Number"), max_length=50, blank=True, null=True
     )
     note = models.TextField(_("Note"), blank=True, null=True)
+
+    @property
+    def total_price(self):
+        base = self.price or Decimal("0.00")
+        return base + (self.price_correction or Decimal("0.00"))
+
+    @property
+    def total_cost(self):
+        base = self.cost or Decimal("0.00")
+        return base + (self.cost_correction or Decimal("0.00"))
+
+    @property
+    def profit(self):
+        return self.total_price - self.total_cost
 
     class Meta:
         verbose_name = _("Excursion Service")
@@ -750,3 +930,69 @@ class ReservationTicket(models.Model):
 
     def __str__(self):
         return f"{self.ticket_id} ({self.reservation_id})"
+
+
+class ServicePriceHistory(models.Model):
+    class ServiceType(models.TextChoices):
+        HOTEL = "HOTEL", _("Hotel Booking")
+        TRANSFER = "TRANSFER", _("Transfer Service")
+        FLIGHT = "FLIGHT", _("Flight Ticket")
+        OTHER = "OTHER", _("Other Service")
+        EXCURSION = "EXCURSION", _("Excursion Service")
+
+    class FieldName(models.TextChoices):
+        PRICE = "PRICE", _("Price")
+        COST = "COST", _("Cost")
+        PRICE_CORRECTION = "PRICE_CORRECTION", _("Price Correction")
+        COST_CORRECTION = "COST_CORRECTION", _("Cost Correction")
+
+    reservation = models.ForeignKey(
+        "Reservation",
+        on_delete=models.CASCADE,
+        related_name="price_history",
+        verbose_name=_("Reservation"),
+    )
+    service_type = models.CharField(
+        _("Service Type"), max_length=20, choices=ServiceType.choices
+    )
+    service_id = models.PositiveIntegerField(_("Service ID"))
+    field_name = models.CharField(
+        _("Field Name"), max_length=20, choices=FieldName.choices
+    )
+    old_value = models.DecimalField(_("Old Value"), max_digits=12, decimal_places=2)
+    new_value = models.DecimalField(_("New Value"), max_digits=12, decimal_places=2)
+    currency_code = models.CharField(
+        _("Currency Code"), max_length=10, blank=True, default=""
+    )
+    reason = models.TextField(_("Reason"))
+    changed_by = models.ForeignKey(
+        "accounts.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="price_changes",
+        verbose_name=_("Changed By"),
+    )
+    changed_at = models.DateTimeField(_("Changed At"), auto_now_add=True)
+    is_reverted = models.BooleanField(_("Is Reverted"), default=False)
+    reverted_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="revert_entries",
+        verbose_name=_("Reverted From"),
+        help_text=_("If this entry was created by an undo, points to the entry it reverted."),
+    )
+
+    class Meta:
+        verbose_name = _("Service Price History")
+        verbose_name_plural = _("Service Price History")
+        ordering = ("-changed_at",)
+        indexes = [
+            models.Index(fields=["service_type", "service_id"]),
+            models.Index(fields=["reservation", "-changed_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.service_type}#{self.service_id} {self.field_name}: {self.old_value} -> {self.new_value}"

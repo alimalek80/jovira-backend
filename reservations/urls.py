@@ -9,6 +9,8 @@ from .views import (
     AdminOtherServiceViewSet,
     AdminReservationTicketViewSet,
     AdminReservationViewSet,
+    AdminServiceCorrectionViewSet,
+    AdminServicePriceHistoryViewSet,
     AdminTransferServiceViewSet,
     AdminTouristViewSet,
     ClientExcursionBookingViewSet,
@@ -22,6 +24,8 @@ from .views import (
 )
 
 admin_router = DefaultRouter()
+admin_router.register(r"service-corrections", AdminServiceCorrectionViewSet, basename="admin-service-corrections")
+admin_router.register(r"service-price-history", AdminServicePriceHistoryViewSet, basename="admin-service-price-history")
 admin_router.register(r"reservations", AdminReservationViewSet, basename="admin-reservations")
 admin_router.register(r"tourists", AdminTouristViewSet, basename="admin-tourists")
 admin_router.register(r"hotel-bookings", AdminHotelBookingViewSet, basename="admin-hotel-bookings")
