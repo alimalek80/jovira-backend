@@ -9,7 +9,7 @@ class AdminCustomUserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = (
             "id", "email", "first_name", "last_name", "phone_number",
-            "role", "agency", "is_active", "is_staff", "is_superuser", "password"
+            "role", "department", "agency", "is_active", "is_staff", "is_superuser", "password"
         )
         read_only_fields = ("id",)
         extra_kwargs = {
@@ -53,9 +53,9 @@ class AdminCustomUserSerializer(serializers.ModelSerializer):
 class ClientCustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "first_name", "last_name", "phone_number", "role", "agency", "is_active")
+        fields = ("id", "email", "first_name", "last_name", "phone_number", "role", "department", "agency", "is_active")
         # Client users must not be able to update their role or agency
-        read_only_fields = ("id", "role", "agency", "is_active")
+        read_only_fields = ("id", "role", "department", "agency", "is_active")
 
 
 class RegisterSerializer(serializers.ModelSerializer):

@@ -18,6 +18,14 @@ class CustomUser(AbstractUser):
         INVENTORY = "INVENTORY", _("Inventory/Admin Staff")
         FINANCE = "FINANCE", _("Finance/Accounting")
 
+    class DepartmentChoices(models.TextChoices):
+        RESERVATION = "RESERVATION", _("Reservation Department")
+        ACCOUNTS = "ACCOUNTS", _("Accounts Department")
+        SALES = "SALES", _("Sales Department")
+        OPERATIONS = "OPERATIONS", _("Operations Department")
+        INVENTORY = "INVENTORY", _("Inventory Department")
+        MANAGEMENT = "MANAGEMENT", _("Management")
+
     username = None
     email = models.EmailField(unique=True)
     phone_number = models.CharField(
@@ -32,6 +40,14 @@ class CustomUser(AbstractUser):
         choices=RoleChoices.choices,
         default=RoleChoices.NORMAL,
         verbose_name=_("Role"),
+    )
+
+    department = models.CharField(
+        max_length=20,
+        choices=DepartmentChoices.choices,
+        null=True,
+        blank=True,
+        verbose_name=_("Department"),
     )
 
     agency = models.ForeignKey(

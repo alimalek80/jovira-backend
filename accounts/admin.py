@@ -7,13 +7,13 @@ from .models import CustomUser
 class CustomUserAdmin(UserAdmin):
 	model = CustomUser
 	ordering = ('id',)
-	list_display = ('email', 'first_name', 'last_name', 'role', 'agency', 'is_staff', 'is_active')
-	list_filter = ('role', 'agency', 'is_staff', 'is_active', 'is_superuser')
+	list_display = ('email', 'first_name', 'last_name', 'role', 'department', 'agency', 'is_staff', 'is_active')
+	list_filter = ('role', 'department', 'agency', 'is_staff', 'is_active', 'is_superuser')
 	search_fields = ('email', 'first_name', 'last_name')
 
 	fieldsets = (
 		(None, {'fields': ('email', 'password')}),
-		('Personal info', {'fields': ('first_name', 'last_name', 'phone_number', 'role', 'agency')}),
+		('Personal info', {'fields': ('first_name', 'last_name', 'phone_number', 'role', 'department', 'agency')}),
 		(
 			'Permissions',
 			{'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')},
@@ -26,7 +26,7 @@ class CustomUserAdmin(UserAdmin):
 			None,
 			{
 				'classes': ('wide',),
-				'fields': ('email', 'password1', 'password2', 'role', 'agency', 'is_staff', 'is_active'),
+				'fields': ('email', 'password1', 'password2', 'role', 'department', 'agency', 'is_staff', 'is_active'),
 			},
 		),
 	)
